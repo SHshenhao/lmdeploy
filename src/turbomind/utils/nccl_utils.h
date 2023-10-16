@@ -19,20 +19,27 @@
 #include "src/turbomind/utils/cuda_utils.h"
 #include "src/turbomind/utils/logger.h"
 
-#include <cuda_runtime.h>
 #ifdef BUILD_MULTI_GPU
+#ifndef DIOPI_ENABLE
 #include <nccl.h>
+#else
+#include "rawdiclapis.h"
+#endif  // DIOPI_ENABLE
 #endif
 #include <stdio.h>
 #include <string>
 
+#ifndef DIOPI_ENABLE
+#include <cuda_runtime.h>
 #if defined(NCCL_VERSION_CODE) && (NCCL_VERSION_CODE >= 21003)
 #define ENABLE_BF16_NCCL
 #endif
+#endif  // DIOPI_ENABLE
 
 namespace turbomind {
 #ifdef BUILD_MULTI_GPU
-#define NCCLCHECK(cmd)                                                                                                 \
+#define NCCLCHECK(cmd)
+#ifndef DIOPI_ENABLE                                                                                                 \
     do {                                                                                                               \
         ncclResult_t r = cmd;                                                                                          \
         if (r != ncclSuccess) {                                                                                        \
@@ -41,6 +48,7 @@ namespace turbomind {
             exit(EXIT_FAILURE);                                                                                        \
         }                                                                                                              \
     } while (0)
+#endif  // DIOPI_ENABLE
 #else
 #define NCCLCHECK(cmd) printf("[WARNING} No NCCL");
 #endif
@@ -50,7 +58,7 @@ struct NcclUid {
     NcclUid(){};
     NcclUid(NcclUid const& uid){};
 #else
-    ncclUniqueId nccl_uid_;
+    dipu::commUniqueId nccl_uid_;
     NcclUid(){};
     NcclUid(NcclUid const& uid): nccl_uid_(uid.nccl_uid_){};
 #endif
@@ -61,8 +69,8 @@ struct NcclParam {
     int world_size_{1};
     int group_id_{0};
 #ifdef BUILD_MULTI_GPU
-    ncclUniqueId nccl_uid_{};
-    ncclComm_t   nccl_comm_ = nullptr;
+    dipu::commUniqueId nccl_uid_{};
+    dipu::diclComm_t   nccl_comm_ = nullptr;
 #endif
 
 #ifdef BUILD_MULTI_GPU
@@ -92,28 +100,28 @@ struct NcclParam {
 
 // New APIs
 template<typename T>
-void ftNcclAllReduceSum(const T* send_buf, T* recv_buf, const int data_size, NcclParam nccl_param, cudaStream_t stream);
+void ftNcclAllReduceSum(const T* send_buf, T* recv_buf, const int data_size, NcclParam nccl_param, deviceStream_t stream);
 
 template<typename T>
 void ftNcclAllGather(
-    const T* send_buf, T* recv_buf, const int data_size, const int rank, NcclParam nccl_param, cudaStream_t stream);
+    const T* send_buf, T* recv_buf, const int data_size, const int rank, NcclParam nccl_param, deviceStream_t stream);
 
 template<typename T>
-void ftNcclBroadCast(T* buff, const int data_size, const int root, NcclParam nccl_param, cudaStream_t stream);
+void ftNcclBroadCast(T* buff, const int data_size, const int root, NcclParam nccl_param, deviceStream_t stream);
 
 template<typename T>
-void ftNcclRecv(T* recv_buf, const int data_size, const int peer, NcclParam nccl_param, cudaStream_t stream);
+void ftNcclRecv(T* recv_buf, const int data_size, const int peer, NcclParam nccl_param, deviceStream_t stream);
 
 template<typename T>
-void ftNcclSend(const T* send_buf, const int data_size, const int peer, NcclParam nccl_param, cudaStream_t stream);
+void ftNcclSend(const T* send_buf, const int data_size, const int peer, NcclParam nccl_param, deviceStream_t stream);
 
 // nccl stream synchronize, abort nccl comms and throw errors when nccl async errors detected
-void ftNcclStreamSynchronize(NcclParam tensor_para, NcclParam pipeline_para_, cudaStream_t stream);
+void ftNcclStreamSynchronize(NcclParam tensor_para, NcclParam pipeline_para_, deviceStream_t stream);
 
 void ftNcclGroupStart();
 void ftNcclGroupEnd();
 void ftNcclGetUniqueId(NcclUid& uid);
-void ftNcclCommInitRank(NcclParam& param, const int rank, const int world_size, const NcclUid uid);
+void ftNcclCommInitRank(NcclParam& param, const int rank, const int world_size, const commUniqueId uid);
 void ftNcclParamDestroy(NcclParam& param);
 
 int ftNcclNextGroupId();

@@ -153,9 +153,9 @@ Tensor Tensor::loadNpy(const std::string& npy_file, const MemoryType where)
     size_t n_elems = fread(data_cpu, Tensor::getTypeSize(type), size, f_ptr);
     FT_CHECK_WITH_INFO(n_elems == size, "reading tensor failed");
     if (where == MEMORY_GPU) {
-        cudaMalloc(&data, size * Tensor::getTypeSize(type));
-        cudaMemcpy(data, data_cpu, size * Tensor::getTypeSize(type), cudaMemcpyHostToDevice);
-        free(data_cpu);
+        dipu::devapis::mallocDevice(&data, size * Tensor::getTypeSize(type));
+        dipu::devapis::memCopyH2D(size * Tensor::getTypeSize(type), data, data_cpu);
+        dipu::devapis::freeDevice(data_cpu);
     }
 
     fclose(f_ptr);

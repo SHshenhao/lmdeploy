@@ -21,7 +21,9 @@
 
 #include "cuda_utils.h"
 #include "src/turbomind/macro.h"
+#ifndef DIOPI_ENABLE
 #include <cuda_runtime.h>
+#endif  // DIOPI_ENABLE
 #include <unordered_map>
 #include <vector>
 
@@ -70,8 +72,8 @@ public:
 
     virtual void*        malloc(size_t size, const bool is_set_zero = true, bool is_host = false) = 0;
     virtual void         free(void** ptr, bool is_host = false) const                             = 0;
-    virtual void         setStream(cudaStream_t stream)                                           = 0;
-    virtual cudaStream_t returnStream()                                                           = 0;
+    virtual void         setStream(deviceStream_t stream)                                           = 0;
+    virtual deviceStream_t returnStream()                                                           = 0;
     virtual void         memSet(void* ptr, const int val, const size_t size)                      = 0;
 
     template<typename T>
@@ -126,7 +128,7 @@ template<>
 class Allocator<AllocatorType::CUDA>: public IAllocator {
 private:
     const int                          device_id_;
-    cudaStream_t                       stream_ = 0;  // initialize as default stream
+    deviceStream_t                       stream_ = 0;  // initialize as default stream
     std::unordered_map<void*, size_t>* pointer_mapping_;
 
     bool isExist(void* address) const
@@ -193,12 +195,12 @@ public:
         delete pointer_mapping_;
     }
 
-    void setStream(cudaStream_t stream)
+    void setStream(deviceStream_t stream)
     {
         stream_ = stream;
     }
 
-    cudaStream_t returnStream()
+    deviceStream_t returnStream()
     {
         return stream_;
     };
@@ -214,17 +216,13 @@ public:
 
         check_cuda_error(getSetDevice(device_id_, &o_device));
         if (is_host) {
-            check_cuda_error(cudaMallocHost(&ptr, (size_t)(ceil(size / 32.)) * 32));
+            check_cuda_error(dipu::devproxy::mallocHost(&ptr, (size_t)(ceil(size / 32.)) * 32));
         }
         else {
-#if defined(CUDA_MEMORY_POOL_DISABLED)
-            check_cuda_error(cudaMalloc(&ptr, (size_t)(ceil(size / 32.)) * 32));
-#else
-            check_cuda_error(cudaMallocAsync(&ptr, (size_t)(ceil(size / 32.)) * 32, stream_));
-#endif
+            check_cuda_error(dipu::devproxy::mallocDevice(&ptr, (size_t)(ceil(size / 32.)) * 32));
         }
         if (is_set_zero) {
-            check_cuda_error(cudaMemsetAsync(ptr, 0, (size_t)(ceil(size / 32.)) * 32, stream_));
+            check_cuda_error(dipu::devproxy::memSetAsync(stream_, ptr, 0, (size_t)(ceil(size / 32.)) * 32));
         }
         check_cuda_error(getSetDevice(o_device));
         TM_LOG_DEBUG("malloc buffer %p with size %ld", ptr, size);
@@ -244,15 +242,10 @@ public:
                 TM_LOG_DEBUG("Free buffer %p", address);
                 check_cuda_error(getSetDevice(device_id_, &o_device));
                 if (is_host) {
-                    check_cuda_error(cudaFreeHost(*ptr));
+                    check_cuda_error(dipu::devproxy::freeHost(*ptr));
                 }
                 else {
-#if defined(CUDA_MEMORY_POOL_DISABLED)
-                    check_cuda_error(cudaFree(*ptr));
-#else
-                    check_cuda_error(cudaFreeAsync(*ptr, stream_));
-                    cudaStreamSynchronize(stream_);
-#endif
+                    check_cuda_error(dipu::devproxy::freeDevice(*ptr));
                 }
                 check_cuda_error(getSetDevice(o_device));
                 pointer_mapping_->erase(address);
@@ -267,7 +260,7 @@ public:
 
     void memSet(void* ptr, const int val, const size_t size)
     {
-        check_cuda_error(cudaMemsetAsync(ptr, val, size, stream_));
+        check_cuda_error(dipu::devproxy::memSetAsync(stream_, ptr, val, size));
     }
 };
 

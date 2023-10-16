@@ -116,6 +116,7 @@ static const char* _cudaGetErrorEnum(cublasStatus_t error)
     return "<unknown>";
 }
 
+#ifndef DIOPI_ENABLE
 template<typename T>
 void check(T result, char const* const func, const char* const file, int const line)
 {
@@ -126,7 +127,19 @@ void check(T result, char const* const func, const char* const file, int const l
 }
 
 #define check_cuda_error(val) check((val), #val, __FILE__, __LINE__)
-#define check_cuda_error_2(val, file, line) check((val), #val, file, line)
+#else
+#define check_cuda_error(val)                                                              \
+{                                                                                          \            
+    try {                                                                                  \
+        (val);                                                                             \
+        dipu::devapis::checkLastError();                                                   \
+    }catch(const std::exception& ex) {                                                     \
+        throw std::runtime_error(std::string("[TM][ERROR] DEVICE runtime error: ") + (ex.what()) + " " \
+                                 + __FILE__ + ":" + std::to_string(__LINE__) + " \n");                 \
+    }                                                                                      \
+}                                                                                          \
+#endif  // DIOPI_ENABLE
+// #define check_cuda_error_2(val, file, line) check((val), #val, file, line)
 
 inline void syncAndCheck(const char* const file, int const line)
 {
@@ -135,28 +148,47 @@ inline void syncAndCheck(const char* const file, int const line)
     if (level_name != nullptr) {
         static std::string level = std::string(level_name);
         if (level == "DEBUG") {
-            cudaDeviceSynchronize();
+            dipu::devapis::syncDevice();
+#ifndef DIOPI_ENABLE
             cudaError_t result = cudaGetLastError();
             if (result) {
                 throw std::runtime_error(std::string("[TM][ERROR] CUDA runtime error: ") + (_cudaGetErrorEnum(result))
                                          + " " + file + ":" + std::to_string(line) + " \n");
             }
+#else
+            try {
+                dipu::devapis::checkLastError();
+            }catch(const std::exception& ex) {
+                throw std::runtime_error(std::string("[TM][ERROR] DEVICE runtime error: ") + (ex.what())
+                                         + " " + file + ":" + std::to_string(line) + " \n");
+            }
+#endif  // DIOPI_ENABLE
             TM_LOG_DEBUG(fmtstr("run syncAndCheck at %s:%d", file, line));
         }
     }
 
 #ifndef NDEBUG
-    cudaDeviceSynchronize();
+    dipu::devapis::syncDevice();
+#ifndef DIOPI_ENABLE
     cudaError_t result = cudaGetLastError();
     if (result) {
         throw std::runtime_error(std::string("[TM][ERROR] CUDA runtime error: ") + (_cudaGetErrorEnum(result)) + " "
                                  + file + ":" + std::to_string(line) + " \n");
     }
+#else
+    try {
+        dipu::devapis::checkLastError();
+    }catch(const std::exception& ex) {
+        throw std::runtime_error(std::string("[TM][ERROR] DEVICE runtime error: ") + (ex.what()) + " "
+                                 + file + ":" + std::to_string(line) + " \n")
+    }
+#endif  // DIOPI_ENABLE
 #endif
 }
 
 #define sync_check_cuda_error() syncAndCheck(__FILE__, __LINE__)
 
+#ifndef DIOPI_ENABLE
 #define checkCUDNN(expression)                                                                                         \
     {                                                                                                                  \
         cudnnStatus_t status = (expression);                                                                           \
@@ -166,6 +198,7 @@ inline void syncAndCheck(const char* const file, int const line)
             std::exit(EXIT_FAILURE);                                                                                   \
         }                                                                                                              \
     }
+#endif  // DIOPI_ENABLE
 
 template<typename T>
 void print_to_file(const T*           result,
@@ -235,50 +268,53 @@ inline void myAssert(bool result, const char* const file, int const line, std::s
 #endif
 
 /*************Time Handling**************/
-class CudaTimer {
-private:
-    cudaEvent_t  event_start_;
-    cudaEvent_t  event_stop_;
-    cudaStream_t stream_;
+// class CudaTimer {
+// private:
+//     cudaEvent_t  event_start_;
+//     cudaEvent_t  event_stop_;
+//     cudaStream_t stream_;
 
-public:
-    explicit CudaTimer(cudaStream_t stream = 0)
-    {
-        stream_ = stream;
-    }
-    void start()
-    {
-        check_cuda_error(cudaEventCreate(&event_start_));
-        check_cuda_error(cudaEventCreate(&event_stop_));
-        check_cuda_error(cudaEventRecord(event_start_, stream_));
-    }
-    float stop()
-    {
-        float time;
-        check_cuda_error(cudaEventRecord(event_stop_, stream_));
-        check_cuda_error(cudaEventSynchronize(event_stop_));
-        check_cuda_error(cudaEventElapsedTime(&time, event_start_, event_stop_));
-        check_cuda_error(cudaEventDestroy(event_start_));
-        check_cuda_error(cudaEventDestroy(event_stop_));
-        return time;
-    }
-    ~CudaTimer() {}
-};
+// public:
+//     explicit CudaTimer(cudaStream_t stream = 0)
+//     {
+//         stream_ = stream;
+//     }
+//     void start()
+//     {
+//         check_cuda_error(cudaEventCreate(&event_start_));
+//         check_cuda_error(cudaEventCreate(&event_stop_));
+//         check_cuda_error(cudaEventRecord(event_start_, stream_));
+//     }
+//     float stop()
+//     {
+//         float time;
+//         check_cuda_error(cudaEventRecord(event_stop_, stream_));
+//         check_cuda_error(cudaEventSynchronize(event_stop_));
+//         check_cuda_error(cudaEventElapsedTime(&time, event_start_, event_stop_));
+//         check_cuda_error(cudaEventDestroy(event_start_));
+//         check_cuda_error(cudaEventDestroy(event_stop_));
+//         return time;
+//     }
+//     ~CudaTimer() {}
+// };
 
 /* ***************************** common utils ****************************** */
 
 inline void print_mem_usage(std::string time = "after allocation")
 {
+#ifndef DIOPI_ENABLE
     size_t free_bytes, total_bytes;
     check_cuda_error(cudaMemGetInfo(&free_bytes, &total_bytes));
     float free  = static_cast<float>(free_bytes) / 1024.0 / 1024.0 / 1024.0;
     float total = static_cast<float>(total_bytes) / 1024.0 / 1024.0 / 1024.0;
     float used  = total - free;
     printf("%-20s: free: %5.2f GB, total: %5.2f GB, used: %5.2f GB\n", time.c_str(), free, total, used);
+#endif  // DIOPI_ENABLE
 }
 
 inline int getSMVersion()
 {
+#ifndef DIOPI_ENABLE
     int device{-1};
     check_cuda_error(cudaGetDevice(&device));
     int sm_major = 0;
@@ -286,25 +322,28 @@ inline int getSMVersion()
     check_cuda_error(cudaDeviceGetAttribute(&sm_major, cudaDevAttrComputeCapabilityMajor, device));
     check_cuda_error(cudaDeviceGetAttribute(&sm_minor, cudaDevAttrComputeCapabilityMinor, device));
     return sm_major * 10 + sm_minor;
+#endif  // DIOPI_ENABLE
 }
 
 inline int getMaxSharedMemoryPerBlock()
 {
+#ifndef DIOPI_ENABLE
     int device{-1};
     check_cuda_error(cudaGetDevice(&device));
     int max_shared_memory_size = 0;
     check_cuda_error(cudaDeviceGetAttribute(&max_shared_memory_size, cudaDevAttrMaxSharedMemoryPerBlock, device));
     return max_shared_memory_size;
+#endif  // DIOPI_ENABLE
 }
 
-inline std::string getDeviceName()
-{
-    int device{-1};
-    check_cuda_error(cudaGetDevice(&device));
-    cudaDeviceProp props;
-    check_cuda_error(cudaGetDeviceProperties(&props, device));
-    return std::string(props.name);
-}
+// inline std::string getDeviceName()
+// {
+//     int device{-1};
+//     check_cuda_error(cudaGetDevice(&device));
+//     cudaDeviceProp props;
+//     check_cuda_error(cudaGetDeviceProperties(&props, device));
+//     return std::string(props.name);
+// }
 
 inline int div_up(int a, int n)
 {
@@ -315,18 +354,16 @@ cudaError_t getSetDevice(int i_device, int* o_device = NULL);
 
 inline int getDevice()
 {
-    int current_dev_id = 0;
-    check_cuda_error(cudaGetDevice(&current_dev_id));
-    return current_dev_id;
+    return dipu::devapis::current_device();
 }
 
 inline int getDeviceCount()
 {
-    int count = 0;
-    check_cuda_error(cudaGetDeviceCount(&count));
+    int count = dipu::devapis::getDeviceCount();
     return count;
 }
 
+// suggest: move to CublasWrapper
 template<typename T>
 CublasDataType getCublasDataType()
 {
@@ -347,6 +384,7 @@ CublasDataType getCublasDataType()
     }
 }
 
+// suggest: move to CublasWrapper
 template<typename T>
 cudaDataType_t getCudaDataType()
 {
@@ -389,7 +427,9 @@ FtCudaDataType getModelFileType(std::string ini_file, std::string section_name);
 // clang-format off
 template<typename T> struct packed_type;
 template <>          struct packed_type<float>         { using type = float; }; // we don't need to pack float by default
+#ifndef DIOPI_ENABLE
 template <>          struct packed_type<half>          { using type = half2; };
+#endif  // DIOPI_ENABLE
 
 #ifdef ENABLE_BF16
 template<>
@@ -400,15 +440,18 @@ struct packed_type<__nv_bfloat16> {
 
 template<typename T> struct num_elems;
 template <>          struct num_elems<float>           { static constexpr int value = 1; };
+#ifndef DIOPI_ENABLE
 template <>          struct num_elems<float2>          { static constexpr int value = 2; };
 template <>          struct num_elems<float4>          { static constexpr int value = 4; };
 template <>          struct num_elems<half>            { static constexpr int value = 1; };
 template <>          struct num_elems<half2>           { static constexpr int value = 2; };
+#endif  // DIOPI_ENABLE
 #ifdef ENABLE_BF16
 template <>          struct num_elems<__nv_bfloat16>   { static constexpr int value = 1; };
 template <>          struct num_elems<__nv_bfloat162>  { static constexpr int value = 2; };
 #endif
 
+#ifndef DIOPI_ENABLE
 template<typename T, int num> struct packed_as;
 template<typename T>          struct packed_as<T, 1>              { using type = T; };
 template<>                    struct packed_as<half,  2>          { using type = half2; };
@@ -482,6 +525,7 @@ void compareTwoTensor(
     delete[] h_pred;
     delete[] h_ref;
 }
+#endif  // DIOPI_ENABLE
 
 /* ************************** end of common utils ************************** */
 }  // namespace turbomind
