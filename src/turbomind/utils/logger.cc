@@ -15,8 +15,11 @@
  */
 
 #include "src/turbomind/utils/logger.h"
+#ifndef DIOPI_ENABLE
 #include <cuda_runtime.h>
-
+#else
+#include "../runtime/device/rawdeviceapis.h"
+#endif  // DIOPI_ENABLE
 namespace turbomind {
 
 Logger::Logger()
@@ -26,7 +29,7 @@ Logger::Logger()
         (is_first_rank_only_char != nullptr && std::string(is_first_rank_only_char) == "ON") ? true : false;
 
     int device_id;
-    cudaGetDevice(&device_id);
+    device_id = dipu::current_device();
 
     char* level_name = std::getenv("TM_LOG_LEVEL");
     if (level_name != nullptr) {
