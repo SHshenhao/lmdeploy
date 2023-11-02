@@ -39,13 +39,14 @@ target_link_libraries(Llama PUBLIC CUDA::cudart
         nccl_utils
         cuda_utils
         logger
-        llama_fmha)
+        llama_fmha
+        runtime)
 
 if (NOT MSVC)
         add_subdirectory(flash_attention2)
         target_link_libraries(Llama PUBLIC flash_attention2)
 endif()
 
-add_executable(llama_gemm llama_gemm.cc)
-target_link_libraries(llama_gemm PUBLIC CUDA::cudart gpt_gemm_func memory_utils cuda_utils logger)
-install(TARGETS llama_gemm DESTINATION ${CMAKE_SOURCE_DIR}/lmdeploy/bin)
+# add_executable(llama_gemm llama_gemm.cc)
+# target_link_libraries(llama_gemm PUBLIC CUDA::cudart gpt_gemm_func memory_utils cuda_utils logger runtime)
+# install(TARGETS llama_gemm DESTINATION ${CMAKE_SOURCE_DIR}/lmdeploy/bin)

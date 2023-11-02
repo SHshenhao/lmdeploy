@@ -21,7 +21,7 @@
 
 #include <cuda_runtime.h>
 #ifdef BUILD_MULTI_GPU
-#include <nccl.h>
+#include "src/turbomind/runtime/rthelper.h"
 #endif
 #include <stdio.h>
 #include <string>
@@ -33,14 +33,15 @@
 namespace turbomind {
 #ifdef BUILD_MULTI_GPU
 #define NCCLCHECK(cmd)                                                                                                 \
-    do {                                                                                                               \
-        ncclResult_t r = cmd;                                                                                          \
-        if (r != ncclSuccess) {                                                                                        \
-            printf("Failed, NCCL error %s:%d '%s'\n", __FILE__, __LINE__, ncclGetErrorString(r));                      \
-            __builtin_trap();                                                                                          \
-            exit(EXIT_FAILURE);                                                                                        \
-        }                                                                                                              \
-    } while (0)
+    cmd; \
+    // do {                                                                                                               \
+    //     ncclResult_t r = cmd;                                                                                          \
+    //     if (r != ncclSuccess) {                                                                                        \
+    //         printf("Failed, NCCL error %s:%d '%s'\n", __FILE__, __LINE__, ncclGetErrorString(r));                      \
+    //         __builtin_trap();                                                                                          \
+    //         exit(EXIT_FAILURE);                                                                                        \
+    //     }                                                                                                              \
+    // } while (0)
 #else
 #define NCCLCHECK(cmd) printf("[WARNING} No NCCL");
 #endif
@@ -50,7 +51,7 @@ struct NcclUid {
     NcclUid(){};
     NcclUid(NcclUid const& uid){};
 #else
-    ncclUniqueId nccl_uid_;
+    dipu::commUniqueId nccl_uid_;
     NcclUid(){};
     NcclUid(NcclUid const& uid): nccl_uid_(uid.nccl_uid_){};
 #endif
@@ -61,8 +62,8 @@ struct NcclParam {
     int world_size_{1};
     int group_id_{0};
 #ifdef BUILD_MULTI_GPU
-    ncclUniqueId nccl_uid_{};
-    ncclComm_t   nccl_comm_ = nullptr;
+    dipu::commUniqueId nccl_uid_{};
+    dipu::diclComm_t   nccl_comm_ = nullptr;
 #endif
 
 #ifdef BUILD_MULTI_GPU
@@ -92,23 +93,23 @@ struct NcclParam {
 
 // New APIs
 template<typename T>
-void ftNcclAllReduceSum(const T* send_buf, T* recv_buf, const int data_size, NcclParam nccl_param, cudaStream_t stream);
+void ftNcclAllReduceSum(const T* send_buf, T* recv_buf, const int data_size, NcclParam nccl_param, dipu::deviceStream_t stream);
 
 template<typename T>
 void ftNcclAllGather(
-    const T* send_buf, T* recv_buf, const int data_size, const int rank, NcclParam nccl_param, cudaStream_t stream);
+    const T* send_buf, T* recv_buf, const int data_size, const int rank, NcclParam nccl_param, dipu::deviceStream_t stream);
 
 template<typename T>
-void ftNcclBroadCast(T* buff, const int data_size, const int root, NcclParam nccl_param, cudaStream_t stream);
+void ftNcclBroadCast(T* buff, const int data_size, const int root, NcclParam nccl_param, dipu::deviceStream_t stream);
 
 template<typename T>
-void ftNcclRecv(T* recv_buf, const int data_size, const int peer, NcclParam nccl_param, cudaStream_t stream);
+void ftNcclRecv(T* recv_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream);
 
 template<typename T>
-void ftNcclSend(const T* send_buf, const int data_size, const int peer, NcclParam nccl_param, cudaStream_t stream);
+void ftNcclSend(const T* send_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream);
 
 // nccl stream synchronize, abort nccl comms and throw errors when nccl async errors detected
-void ftNcclStreamSynchronize(NcclParam tensor_para, NcclParam pipeline_para_, cudaStream_t stream);
+void ftNcclStreamSynchronize(NcclParam tensor_para, NcclParam pipeline_para_, dipu::deviceStream_t stream);
 
 void ftNcclGroupStart();
 void ftNcclGroupEnd();

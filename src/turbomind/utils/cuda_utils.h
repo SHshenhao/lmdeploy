@@ -21,6 +21,8 @@
 #include "src/turbomind/utils/cuda_bf16_wrapper.h"
 #include "src/turbomind/utils/logger.h"
 
+#include "src/turbomind/runtime/rthelper.h"
+
 #include <cublasLt.h>
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
@@ -75,58 +77,68 @@ enum class OperationType
 };
 
 /* **************************** debug tools ********************************* */
-static const char* _cudaGetErrorEnum(cudaError_t error)
-{
-    return cudaGetErrorString(error);
-}
+// static const char* _cudaGetErrorEnum(cudaError_t error)
+// {
+//     return cudaGetErrorString(error);
+// }
 
-static const char* _cudaGetErrorEnum(cublasStatus_t error)
-{
-    switch (error) {
-        case CUBLAS_STATUS_SUCCESS:
-            return "CUBLAS_STATUS_SUCCESS";
+// static const char* _cudaGetErrorEnum(cublasStatus_t error)
+// {
+//     switch (error) {
+//         case CUBLAS_STATUS_SUCCESS:
+//             return "CUBLAS_STATUS_SUCCESS";
 
-        case CUBLAS_STATUS_NOT_INITIALIZED:
-            return "CUBLAS_STATUS_NOT_INITIALIZED";
+//         case CUBLAS_STATUS_NOT_INITIALIZED:
+//             return "CUBLAS_STATUS_NOT_INITIALIZED";
 
-        case CUBLAS_STATUS_ALLOC_FAILED:
-            return "CUBLAS_STATUS_ALLOC_FAILED";
+//         case CUBLAS_STATUS_ALLOC_FAILED:
+//             return "CUBLAS_STATUS_ALLOC_FAILED";
 
-        case CUBLAS_STATUS_INVALID_VALUE:
-            return "CUBLAS_STATUS_INVALID_VALUE";
+//         case CUBLAS_STATUS_INVALID_VALUE:
+//             return "CUBLAS_STATUS_INVALID_VALUE";
 
-        case CUBLAS_STATUS_ARCH_MISMATCH:
-            return "CUBLAS_STATUS_ARCH_MISMATCH";
+//         case CUBLAS_STATUS_ARCH_MISMATCH:
+//             return "CUBLAS_STATUS_ARCH_MISMATCH";
 
-        case CUBLAS_STATUS_MAPPING_ERROR:
-            return "CUBLAS_STATUS_MAPPING_ERROR";
+//         case CUBLAS_STATUS_MAPPING_ERROR:
+//             return "CUBLAS_STATUS_MAPPING_ERROR";
 
-        case CUBLAS_STATUS_EXECUTION_FAILED:
-            return "CUBLAS_STATUS_EXECUTION_FAILED";
+//         case CUBLAS_STATUS_EXECUTION_FAILED:
+//             return "CUBLAS_STATUS_EXECUTION_FAILED";
 
-        case CUBLAS_STATUS_INTERNAL_ERROR:
-            return "CUBLAS_STATUS_INTERNAL_ERROR";
+//         case CUBLAS_STATUS_INTERNAL_ERROR:
+//             return "CUBLAS_STATUS_INTERNAL_ERROR";
 
-        case CUBLAS_STATUS_NOT_SUPPORTED:
-            return "CUBLAS_STATUS_NOT_SUPPORTED";
+//         case CUBLAS_STATUS_NOT_SUPPORTED:
+//             return "CUBLAS_STATUS_NOT_SUPPORTED";
 
-        case CUBLAS_STATUS_LICENSE_ERROR:
-            return "CUBLAS_STATUS_LICENSE_ERROR";
+//         case CUBLAS_STATUS_LICENSE_ERROR:
+//             return "CUBLAS_STATUS_LICENSE_ERROR";
+//     }
+//     return "<unknown>";
+// }
+
+// template<typename T>
+// void check(T result, char const* const func, const char* const file, int const line)
+// {
+//     if (result) {
+//         throw std::runtime_error(std::string("[TM][ERROR] CUDA runtime error: ") + (_cudaGetErrorEnum(result)) + " "
+//                                  + file + ":" + std::to_string(line) + " \n");
+//     }
+// }
+
+// #define check_cuda_error(val) check((val), #val, __FILE__, __LINE__)
+// #define check_cuda_error_2(val, file, line) check((val), #val, file, line)
+#define check_cuda_error(val)  \
+    {                  \
+        try {                  \
+            val;                 \
+            dipu::devapis::checkLastError();                  \
+        }catch(const std::exception& ex) {                  \
+            throw std::runtime_error(std::string("[TM][ERROR] DEVICE runtime error: ") + (ex.what()) + " " \
+                                    + __FILE__ + ":" + std::to_string(__LINE__) + " \n");                 \
+        };                  \
     }
-    return "<unknown>";
-}
-
-template<typename T>
-void check(T result, char const* const func, const char* const file, int const line)
-{
-    if (result) {
-        throw std::runtime_error(std::string("[TM][ERROR] CUDA runtime error: ") + (_cudaGetErrorEnum(result)) + " "
-                                 + file + ":" + std::to_string(line) + " \n");
-    }
-}
-
-#define check_cuda_error(val) check((val), #val, __FILE__, __LINE__)
-#define check_cuda_error_2(val, file, line) check((val), #val, file, line)
 
 inline void syncAndCheck(const char* const file, int const line)
 {
@@ -135,23 +147,25 @@ inline void syncAndCheck(const char* const file, int const line)
     if (level_name != nullptr) {
         static std::string level = std::string(level_name);
         if (level == "DEBUG") {
-            cudaDeviceSynchronize();
-            cudaError_t result = cudaGetLastError();
-            if (result) {
-                throw std::runtime_error(std::string("[TM][ERROR] CUDA runtime error: ") + (_cudaGetErrorEnum(result))
+            try {
+                dipu::devapis::syncDevice();
+                dipu::devapis::checkLastError();
+            }catch(const std::exception& ex) {
+                throw std::runtime_error(std::string("[TM][ERROR] DEVICE runtime error: ") + (ex.what())
                                          + " " + file + ":" + std::to_string(line) + " \n");
-            }
+            };
             TM_LOG_DEBUG(fmtstr("run syncAndCheck at %s:%d", file, line));
         }
     }
 
 #ifndef NDEBUG
-    cudaDeviceSynchronize();
-    cudaError_t result = cudaGetLastError();
-    if (result) {
-        throw std::runtime_error(std::string("[TM][ERROR] CUDA runtime error: ") + (_cudaGetErrorEnum(result)) + " "
-                                 + file + ":" + std::to_string(line) + " \n");
-    }
+    dipu::devapis::syncDevice();
+    try {
+        dipu::devapis::checkLastError();
+    }catch(const std::exception& ex) {
+        throw std::runtime_error(std::string("[TM][ERROR] DEVICE runtime error: ") + (ex.what()) + " "
+                                 + file + ":" + std::to_string(line) + " \n")
+    };
 #endif
 }
 
@@ -235,35 +249,35 @@ inline void myAssert(bool result, const char* const file, int const line, std::s
 #endif
 
 /*************Time Handling**************/
-class CudaTimer {
-private:
-    cudaEvent_t  event_start_;
-    cudaEvent_t  event_stop_;
-    cudaStream_t stream_;
+// class CudaTimer {
+// private:
+//     cudaEvent_t  event_start_;
+//     cudaEvent_t  event_stop_;
+//     cudaStream_t stream_;
 
-public:
-    explicit CudaTimer(cudaStream_t stream = 0)
-    {
-        stream_ = stream;
-    }
-    void start()
-    {
-        check_cuda_error(cudaEventCreate(&event_start_));
-        check_cuda_error(cudaEventCreate(&event_stop_));
-        check_cuda_error(cudaEventRecord(event_start_, stream_));
-    }
-    float stop()
-    {
-        float time;
-        check_cuda_error(cudaEventRecord(event_stop_, stream_));
-        check_cuda_error(cudaEventSynchronize(event_stop_));
-        check_cuda_error(cudaEventElapsedTime(&time, event_start_, event_stop_));
-        check_cuda_error(cudaEventDestroy(event_start_));
-        check_cuda_error(cudaEventDestroy(event_stop_));
-        return time;
-    }
-    ~CudaTimer() {}
-};
+// public:
+//     explicit CudaTimer(cudaStream_t stream = 0)
+//     {
+//         stream_ = stream;
+//     }
+//     void start()
+//     {
+//         check_cuda_error(cudaEventCreate(&event_start_));
+//         check_cuda_error(cudaEventCreate(&event_stop_));
+//         check_cuda_error(cudaEventRecord(event_start_, stream_));
+//     }
+//     float stop()
+//     {
+//         float time;
+//         check_cuda_error(cudaEventRecord(event_stop_, stream_));
+//         check_cuda_error(cudaEventSynchronize(event_stop_));
+//         check_cuda_error(cudaEventElapsedTime(&time, event_start_, event_stop_));
+//         check_cuda_error(cudaEventDestroy(event_start_));
+//         check_cuda_error(cudaEventDestroy(event_stop_));
+//         return time;
+//     }
+//     ~CudaTimer() {}
+// };
 
 /* ***************************** common utils ****************************** */
 
@@ -311,19 +325,16 @@ inline int div_up(int a, int n)
     return (a + n - 1) / n;
 }
 
-cudaError_t getSetDevice(int i_device, int* o_device = NULL);
+void getSetDevice(int i_device, int* o_device = NULL);
 
 inline int getDevice()
 {
-    int current_dev_id = 0;
-    check_cuda_error(cudaGetDevice(&current_dev_id));
-    return current_dev_id;
+    return dipu::devapis::current_device();
 }
 
 inline int getDeviceCount()
 {
-    int count = 0;
-    check_cuda_error(cudaGetDeviceCount(&count));
+    int count = dipu::devapis::getDeviceCount();
     return count;
 }
 

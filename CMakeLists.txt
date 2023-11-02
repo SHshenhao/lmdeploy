@@ -283,7 +283,7 @@ link_directories(
 
 # add_subdirectory(3rdparty)
 add_subdirectory(src)
-add_subdirectory(examples)
+# add_subdirectory(examples)
 
 if(BUILD_TEST)
     add_subdirectory(tests/csrc)
@@ -307,8 +307,10 @@ if (MEASURE_BUILD_TIME)
 endif()
 
 ########################################
+include_directories(SYSTEM "/home/shenhao/work/lmdeploy/3rdparty/DIOPI/proto/include")
 
 add_library(transformer-shared SHARED
+  $<TARGET_OBJECTS:runtime>
   $<TARGET_OBJECTS:BaseSamplingLayer>
   $<TARGET_OBJECTS:DynamicDecodeLayer>
   $<TARGET_OBJECTS:llama_fmha>

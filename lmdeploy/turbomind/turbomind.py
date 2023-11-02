@@ -122,6 +122,7 @@ class TurboMind:
 
         # create model
         weight_dir = osp.join(model_path, 'triton_models', 'weights')
+        import pdb;pdb.set_trace();
         model = _tm.AbstractTransformerModel.create_llama_model(
             weight_dir, tensor_para_size=self.gpu_count, data_type=data_type)
         self.model = model

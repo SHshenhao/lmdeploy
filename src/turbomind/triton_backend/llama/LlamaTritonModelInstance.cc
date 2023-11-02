@@ -242,7 +242,7 @@ LlamaTritonModelInstance<T>::forward(std::shared_ptr<std::unordered_map<std::str
             };
         }
 
-        ft::check_cuda_error(cudaStreamSynchronize(allocator_->returnStream()));
+        check_cuda_error(cudaStreamSynchronize(allocator_->returnStream()));
         instance_->llm->forward(&output_tensors, &ft_input_tensors, {instance_comm, callback});
         // ! stream synced by the model before returning
     }

@@ -26,6 +26,8 @@
 #include "src/turbomind/utils/allocator.h"
 #include <mutex>
 
+#include "src/turbomind/runtime/diopirt/diopirt_impl.h"
+
 namespace ft = turbomind;
 
 std::shared_ptr<AbstractTransformerModel> AbstractTransformerModel::createLlamaModel(std::string inifile)
@@ -101,12 +103,17 @@ template<typename T>
 LlamaTritonModel<T>::LlamaTritonModel(size_t      tensor_para_size,
                                       size_t      pipeline_para_size,
                                       int         enable_custom_all_reduce,
-                                      std::string model_dir):
-    tensor_para_size_(tensor_para_size),
-    pipeline_para_size_(pipeline_para_size),
-    shared_weights_(std::vector<std::shared_ptr<ft::LlamaWeight<T>>>(ft::getDeviceCount())),
-    enable_custom_all_reduce_(enable_custom_all_reduce)
+                                      std::string model_dir)//:
+    // tensor_para_size_(tensor_para_size),
+    // pipeline_para_size_(pipeline_para_size),
+    // shared_weights_(std::vector<std::shared_ptr<ft::LlamaWeight<T>>>(ft::getDeviceCount())),
+    // enable_custom_all_reduce_(enable_custom_all_reduce)
 {
+    std::cout<<"diopiGetVersion:"<<diopiGetVersion()<<std::endl;
+    tensor_para_size_ = tensor_para_size;
+    pipeline_para_size_ = pipeline_para_size;
+    shared_weights_ = std::vector<std::shared_ptr<ft::LlamaWeight<T>>>(ft::getDeviceCount());
+    enable_custom_all_reduce_ = enable_custom_all_reduce;
     model_dir_ = model_dir;
     const std::string inifile{model_dir + "/config.ini"};
     INIReader         reader = INIReader(inifile);
@@ -130,7 +137,7 @@ LlamaTritonModel<T>::LlamaTritonModel(size_t      tensor_para_size,
     session_len_           = reader.GetInteger("llama", "session_len", 0);
     step_length_           = reader.GetInteger("llama", "step_length", 0);
     cache_max_entry_count_ = reader.GetInteger("llama", "cache_max_entry_count", 0);
-    use_context_fmha_      = reader.GetInteger("llama", "use_context_fmha", 1);
+    use_context_fmha_      = 0;//reader.GetInteger("llama", "use_context_fmha", 1);
     cache_chunk_size_      = reader.GetInteger("llama", "cache_chunk_size", 0);
     attn_bias_             = reader.GetInteger("llama", "attn_bias", 0);
     quant_policy_          = reader.GetInteger("llama", "quant_policy", 0);
@@ -181,7 +188,7 @@ std::unique_ptr<LlamaTritonSharedModelInstance<T>> LlamaTritonModel<T>::createSh
     std::pair<std::vector<ft::NcclParam>, std::vector<ft::NcclParam>> nccl_params,
     std::shared_ptr<ft::AbstractCustomComm>                           custom_all_reduce_comm)
 {
-    ft::check_cuda_error(cudaSetDevice(device_id));
+    check_cuda_error(cudaSetDevice(device_id));
     const int comms_rank = device_id % (tensor_para_size_ * pipeline_para_size_);
 
     std::unique_ptr<ft::Allocator<ft::AllocatorType::CUDA>> allocator(
@@ -189,7 +196,7 @@ std::unique_ptr<LlamaTritonSharedModelInstance<T>> LlamaTritonModel<T>::createSh
 
     /// TODO: this stream handle is leaked
     cudaStream_t stream{};
-    ft::check_cuda_error(cudaStreamCreate(&stream));
+    check_cuda_error(cudaStreamCreate(&stream));
 
     allocator->setStream(stream);
 
@@ -206,7 +213,7 @@ std::unique_ptr<LlamaTritonSharedModelInstance<T>> LlamaTritonModel<T>::createSh
         cublas_handle, cublaslt_handle, stream, cublas_algo_map.get(), cublas_wrapper_mutex.get(), allocator.get()));
 
     std::unique_ptr<cudaDeviceProp> cuda_device_prop_ptr(new cudaDeviceProp);
-    ft::check_cuda_error(cudaGetDeviceProperties(cuda_device_prop_ptr.get(), device_id));
+    check_cuda_error(cudaGetDeviceProperties(cuda_device_prop_ptr.get(), device_id));
 
     if (std::is_same<T, half>::value) {
         cublas_wrapper->setGemmConfig(CUDA_R_16F, CUDA_R_16F, CUDA_R_16F, CUDA_R_32F);
@@ -267,7 +274,7 @@ LlamaTritonModel<T>::createModelInstance(int                                    
                                          std::pair<std::vector<ft::NcclParam>, std::vector<ft::NcclParam>> nccl_params,
                                          std::shared_ptr<ft::AbstractCustomComm> custom_all_reduce_comm)
 {
-    ft::check_cuda_error(cudaSetDevice(device_id));
+    check_cuda_error(cudaSetDevice(device_id));
     // const int comms_rank = device_id % (tensor_para_size_ * pipeline_para_size_);
 
     std::shared_ptr<LlamaTritonSharedModelInstance<T>> instance;
@@ -292,7 +299,7 @@ LlamaTritonModel<T>::createModelInstance(int                                    
 template<typename T>
 void LlamaTritonModel<T>::createSharedWeights(int device_id, int rank)
 {
-    ft::check_cuda_error(cudaSetDevice(device_id));
+    check_cuda_error(cudaSetDevice(device_id));
     const int tensor_para_rank   = rank % tensor_para_size_;
     const int pipeline_para_rank = rank / tensor_para_size_;
     ft::FT_CHECK(pipeline_para_size_ == 1 && pipeline_para_rank == 0);

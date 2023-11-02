@@ -55,126 +55,123 @@ ncclDataType_t getNcclDataType()
 #endif
 
 template<typename T>
-void ftNcclAllReduceSum(const T* send_buf, T* recv_buf, const int data_size, NcclParam nccl_param, cudaStream_t stream)
+void ftNcclAllReduceSum(const T* send_buf, T* recv_buf, const int data_size, NcclParam nccl_param, dipu::deviceStream_t stream)
 {
     TM_LOG_DEBUG("%s start", __PRETTY_FUNCTION__);
 #ifdef BUILD_MULTI_GPU
-    ncclDataType_t nccl_data_type = getNcclDataType<T>();
-    NCCLCHECK(ncclGroupStart());
-    NCCLCHECK(ncclAllReduce(
-        (const void*)send_buf, (void*)recv_buf, data_size, nccl_data_type, ncclSum, nccl_param.nccl_comm_, stream));
-    NCCLCHECK(ncclGroupEnd());
+    dipu::devapis::diclRawGroupStart();
+    dipu::devapis::diclRawAllReduce(
+        (const void*)send_buf, (void*)recv_buf, data_size, dipu::devapis::getDiclDataType<T>(), dipu::devapis::DiclReduceOp::SUM, nccl_param.nccl_comm_, stream
+    );
+    dipu::devapis::diclRawGroupEnd();
 #endif
     TM_LOG_DEBUG("%s stop", __PRETTY_FUNCTION__);
 }
 
 template<typename T>
 void ftNcclAllGather(
-    const T* send_buf, T* recv_buf, const int data_size, const int rank, NcclParam nccl_param, cudaStream_t stream)
+    const T* send_buf, T* recv_buf, const int data_size, const int rank, NcclParam nccl_param, dipu::deviceStream_t stream)
 {
     TM_LOG_DEBUG("%s start", __PRETTY_FUNCTION__);
 #ifdef BUILD_MULTI_GPU
-    ncclDataType_t nccl_data_type = getNcclDataType<T>();
-    NCCLCHECK(ncclGroupStart());
-    NCCLCHECK(
-        ncclAllGather(send_buf + rank * data_size, recv_buf, data_size, nccl_data_type, nccl_param.nccl_comm_, stream));
-    NCCLCHECK(ncclGroupEnd());
+    dipu::devapis::diclRawGroupStart();
+    dipu::devapis::diclRawAllGather(
+        (const void*)send_buf, (void*)recv_buf, data_size, dipu::devapis::getDiclDataType<T>(), nccl_param.nccl_comm_, stream
+    );
+    dipu::devapis::diclRawGroupEnd();
 #endif
     TM_LOG_DEBUG("%s stop", __PRETTY_FUNCTION__);
 }
 
 template<typename T>
-void ftNcclSend(const T* send_buf, const int data_size, const int peer, NcclParam nccl_param, cudaStream_t stream)
+void ftNcclSend(const T* send_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream)
 {
     TM_LOG_DEBUG("%s start", __PRETTY_FUNCTION__);
 #ifdef BUILD_MULTI_GPU
-    ncclDataType_t nccl_data_type = getNcclDataType<T>();
-    NCCLCHECK(ncclSend(send_buf, data_size, nccl_data_type, peer, nccl_param.nccl_comm_, stream));
+    dipu::devapis::diclRawSend(send_buf, data_size, dipu::devapis::getDiclDataType<T>(), peer, nccl_param.nccl_comm_, stream);
 #endif
     TM_LOG_DEBUG("%s stop", __PRETTY_FUNCTION__);
 }
 
 template void
-ftNcclSend(const float* send_buf, const int data_size, const int peer, NcclParam nccl_param, cudaStream_t stream);
+ftNcclSend(const float* send_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream);
 template void
-ftNcclSend(const half* send_buf, const int data_size, const int peer, NcclParam nccl_param, cudaStream_t stream);
+ftNcclSend(const half* send_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream);
 #ifdef ENABLE_BF16
 template void ftNcclSend(
-    const __nv_bfloat16* send_buf, const int data_size, const int peer, NcclParam nccl_param, cudaStream_t stream);
+    const __nv_bfloat16* send_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream);
 #endif
 template void
-ftNcclSend(const int* send_buf, const int data_size, const int peer, NcclParam nccl_param, cudaStream_t stream);
+ftNcclSend(const int* send_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream);
 template void
-ftNcclSend(const bool* send_buf, const int data_size, const int peer, NcclParam nccl_param, cudaStream_t stream);
+ftNcclSend(const bool* send_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream);
 template void
-ftNcclSend(const char* send_buf, const int data_size, const int peer, NcclParam nccl_param, cudaStream_t stream);
+ftNcclSend(const char* send_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream);
 
 template<typename T>
-void ftNcclRecv(T* recv_buf, const int data_size, const int peer, NcclParam nccl_param, cudaStream_t stream)
+void ftNcclRecv(T* recv_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream)
 {
     TM_LOG_DEBUG("%s start", __PRETTY_FUNCTION__);
 #ifdef BUILD_MULTI_GPU
-    ncclDataType_t nccl_data_type = getNcclDataType<T>();
-    NCCLCHECK(ncclRecv(recv_buf, data_size, nccl_data_type, peer, nccl_param.nccl_comm_, stream));
+    dipu::devapis::diclRawRecv(recv_buf, data_size, dipu::devapis::getDiclDataType<T>(), peer, nccl_param.nccl_comm_, stream);
 #endif
     TM_LOG_DEBUG("%s stop", __PRETTY_FUNCTION__);
 }
 
 template void
-ftNcclRecv(float* recv_buf, const int data_size, const int peer, NcclParam nccl_param, cudaStream_t stream);
+ftNcclRecv(float* recv_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream);
 template void
-ftNcclRecv(half* recv_buf, const int data_size, const int peer, NcclParam nccl_param, cudaStream_t stream);
+ftNcclRecv(half* recv_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream);
 #ifdef ENABLE_BF16
 template void
-ftNcclRecv(__nv_bfloat16* recv_buf, const int data_size, const int peer, NcclParam nccl_param, cudaStream_t stream);
+ftNcclRecv(__nv_bfloat16* recv_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream);
 #endif
-template void ftNcclRecv(int* recv_buf, const int data_size, const int peer, NcclParam nccl_param, cudaStream_t stream);
+template void ftNcclRecv(int* recv_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream);
 template void
-ftNcclRecv(bool* recv_buf, const int data_size, const int peer, NcclParam nccl_param, cudaStream_t stream);
+ftNcclRecv(bool* recv_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream);
 template void
-ftNcclRecv(char* recv_buf, const int data_size, const int peer, NcclParam nccl_param, cudaStream_t stream);
+ftNcclRecv(char* recv_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream);
 
 template<typename T>
-void ftNcclBroadCast(T* buff, const int data_size, const int root, NcclParam nccl_param, cudaStream_t stream)
+void ftNcclBroadCast(T* buff, const int data_size, const int root, NcclParam nccl_param, dipu::deviceStream_t stream)
 {
     TM_LOG_DEBUG("%s start", __PRETTY_FUNCTION__);
 #ifdef BUILD_MULTI_GPU
-    ncclDataType_t nccl_data_type = getNcclDataType<T>();
-    NCCLCHECK(ncclBcast(buff, data_size, nccl_data_type, root, nccl_param.nccl_comm_, stream));
+    dipu::devapis::diclRawBroadcast(buff, buff, data_size, dipu::devapis::getDiclDataType<T>(), root, nccl_param.nccl_comm_, stream);
 #endif
     TM_LOG_DEBUG("%s stop", __PRETTY_FUNCTION__);
 }
 
 template void
-ftNcclBroadCast(char* buff, const int data_size, const int root, NcclParam nccl_param, cudaStream_t stream);
+ftNcclBroadCast(char* buff, const int data_size, const int root, NcclParam nccl_param, dipu::deviceStream_t stream);
 template void
-ftNcclBroadCast(bool* buff, const int data_size, const int root, NcclParam nccl_param, cudaStream_t stream);
+ftNcclBroadCast(bool* buff, const int data_size, const int root, NcclParam nccl_param, dipu::deviceStream_t stream);
 template void
-ftNcclBroadCast(int* buff, const int data_size, const int root, NcclParam nccl_param, cudaStream_t stream);
+ftNcclBroadCast(int* buff, const int data_size, const int root, NcclParam nccl_param, dipu::deviceStream_t stream);
 template void
-ftNcclBroadCast(float* buff, const int data_size, const int root, NcclParam nccl_param, cudaStream_t stream);
+ftNcclBroadCast(float* buff, const int data_size, const int root, NcclParam nccl_param, dipu::deviceStream_t stream);
 template void
-ftNcclBroadCast(half* buff, const int data_size, const int root, NcclParam nccl_param, cudaStream_t stream);
+ftNcclBroadCast(half* buff, const int data_size, const int root, NcclParam nccl_param, dipu::deviceStream_t stream);
 #ifdef ENABLE_BF16
 template void
-ftNcclBroadCast(__nv_bfloat16* buff, const int data_size, const int root, NcclParam nccl_param, cudaStream_t stream);
+ftNcclBroadCast(__nv_bfloat16* buff, const int data_size, const int root, NcclParam nccl_param, dipu::deviceStream_t stream);
 #endif
 
 template void ftNcclAllReduceSum(
-    const float* send_buf, float* recv_buf, const int data_size, NcclParam nccl_param, cudaStream_t stream);
+    const float* send_buf, float* recv_buf, const int data_size, NcclParam nccl_param, dipu::deviceStream_t stream);
 
 template void ftNcclAllReduceSum(
-    const half* send_buf, half* recv_buf, const int data_size, NcclParam nccl_param, cudaStream_t stream);
+    const half* send_buf, half* recv_buf, const int data_size, NcclParam nccl_param, dipu::deviceStream_t stream);
 
 template void ftNcclAllReduceSum(
-    const int32_t* send_buf, int32_t* recv_buf, const int data_size, NcclParam nccl_param, cudaStream_t stream);
+    const int32_t* send_buf, int32_t* recv_buf, const int data_size, NcclParam nccl_param, dipu::deviceStream_t stream);
 
 #ifdef ENABLE_BF16
 template void ftNcclAllReduceSum(const __nv_bfloat16* send_buf,
                                  __nv_bfloat16*       recv_buf,
                                  const int            data_size,
                                  NcclParam            nccl_param,
-                                 cudaStream_t         stream);
+                                 dipu::deviceStream_t         stream);
 #endif
 
 template void ftNcclAllGather(const float* send_buf,
@@ -182,14 +179,14 @@ template void ftNcclAllGather(const float* send_buf,
                               const int    data_size,
                               const int    rank,
                               NcclParam    nccl_param,
-                              cudaStream_t stream);
+                              dipu::deviceStream_t stream);
 
 template void ftNcclAllGather(const half*  send_buf,
                               half*        recv_buf,
                               const int    data_size,
                               const int    rank,
                               NcclParam    nccl_param,
-                              cudaStream_t stream);
+                              dipu::deviceStream_t stream);
 
 #ifdef ENABLE_BF16
 template void ftNcclAllGather(const __nv_bfloat16* send_buf,
@@ -197,24 +194,24 @@ template void ftNcclAllGather(const __nv_bfloat16* send_buf,
                               const int            data_size,
                               const int            rank,
                               NcclParam            nccl_param,
-                              cudaStream_t         stream);
+                              dipu::deviceStream_t         stream);
 #endif
 
 void ftNcclGroupStart()
 {
 #ifdef BUILD_MULTI_GPU
-    NCCLCHECK(ncclGroupStart());
+    dipu::devapis::diclRawGroupStart();
 #endif
 }
 
 void ftNcclGroupEnd()
 {
 #ifdef BUILD_MULTI_GPU
-    NCCLCHECK(ncclGroupEnd());
+    dipu::devapis::diclRawGroupEnd();
 #endif
 }
 
-void ftNcclStreamSynchronize(NcclParam tensor_para, NcclParam pipeline_para, cudaStream_t stream)
+void ftNcclStreamSynchronize(NcclParam tensor_para, NcclParam pipeline_para, dipu::deviceStream_t stream)
 {
     TM_LOG_DEBUG("%s start", __PRETTY_FUNCTION__);
 #ifdef BUILD_MULTI_GPU
@@ -277,7 +274,7 @@ void ftNcclStreamSynchronize(NcclParam tensor_para, NcclParam pipeline_para, cud
 void ftNcclGetUniqueId(NcclUid& uid)
 {
 #ifdef BUILD_MULTI_GPU
-    NCCLCHECK(ncclGetUniqueId(&uid.nccl_uid_));
+    dipu::devapis::diclGetUniqueId(&uid.nccl_uid_);
 #endif
 }
 
@@ -293,7 +290,7 @@ void ftNcclCommInitRank(NcclParam& param, const int rank, const int world_size, 
     param.rank_       = rank;
     param.world_size_ = world_size;
     param.nccl_uid_   = uid.nccl_uid_;
-    NCCLCHECK(ncclCommInitRank(&param.nccl_comm_, param.world_size_, param.nccl_uid_, param.rank_));
+    dipu::devapis::diclCommInitRank(&param.nccl_comm_, param.world_size_, param.nccl_uid_, param.rank_);
 #endif
     TM_LOG_DEBUG("%s stop", __PRETTY_FUNCTION__);
 }
@@ -302,7 +299,7 @@ void ftNcclParamDestroy(NcclParam& param)
 {
 #ifdef BUILD_MULTI_GPU
     if (param.nccl_comm_ != nullptr) {
-        ncclCommDestroy(param.nccl_comm_);
+        dipu::devapis::diclCommDestroy(param.nccl_comm_);
     }
 #endif
 }

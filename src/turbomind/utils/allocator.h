@@ -70,8 +70,8 @@ public:
 
     virtual void*        malloc(size_t size, const bool is_set_zero = true, bool is_host = false) = 0;
     virtual void         free(void** ptr, bool is_host = false) const                             = 0;
-    virtual void         setStream(cudaStream_t stream)                                           = 0;
-    virtual cudaStream_t returnStream()                                                           = 0;
+    virtual void         setStream(dipu::deviceStream_t stream)                                   = 0;
+    virtual dipu::deviceStream_t returnStream()                                                   = 0;
     virtual void         memSet(void* ptr, const int val, const size_t size)                      = 0;
 
     template<typename T>
@@ -132,7 +132,7 @@ private:
     };
 
     const int                                                 device_id_;
-    cudaStream_t                                              stream_ = 0;  // initialize as default stream
+    dipu::deviceStream_t                                      stream_ = 0;  // initialize as default stream
     std::unordered_map<void*, std::pair<size_t, MemoryType>>* pointer_mapping_;
 
     bool isExist(void* address) const
@@ -158,36 +158,36 @@ public:
     {
         TM_LOG_DEBUG(__PRETTY_FUNCTION__);
         pointer_mapping_ = new std::unordered_map<void*, std::pair<size_t, MemoryType>>();
-#if defined(CUDA_MEMORY_POOL_DISABLED)
-        TM_LOG_WARNING(
-            "Async cudaMalloc/Free is not supported before CUDA 11.2. Using Sync cudaMalloc/Free."
-            "Note this may lead to hang with NCCL kernels launched in parallel; if so, try NCCL_LAUNCH_MODE=GROUP");
-#else
-        int device_count = 1;
-        check_cuda_error(cudaGetDeviceCount(&device_count));
-        cudaMemPool_t mempool;
-        check_cuda_error(cudaDeviceGetDefaultMemPool(&mempool, device_id));
-        cudaMemAccessDesc desc                  = {};
-        int               peer_access_available = 0;
-        for (int i = 0; i < device_count; i++) {
-            if (i == device_id) {
-                continue;
-            }
-            check_cuda_error(cudaDeviceCanAccessPeer(&peer_access_available, device_id, i));
-            if (!peer_access_available) {
-                TM_LOG_WARNING("Device " + std::to_string(device_id) + " peer access Device " + std::to_string(i)
-                               + " is not available.");
-                continue;
-            }
-            desc.location.type = cudaMemLocationTypeDevice;
-            desc.location.id   = i;
-            desc.flags         = cudaMemAccessFlagsProtReadWrite;
-            check_cuda_error(cudaMemPoolSetAccess(mempool, &desc, 1));
-        }
-        // set memory pool threshold to avoid shrinking the pool
-        uint64_t setVal = UINT64_MAX;
-        check_cuda_error(cudaMemPoolSetAttribute(mempool, cudaMemPoolAttrReleaseThreshold, &setVal));
-#endif
+// #if defined(CUDA_MEMORY_POOL_DISABLED)
+//         TM_LOG_WARNING(
+//             "Async cudaMalloc/Free is not supported before CUDA 11.2. Using Sync cudaMalloc/Free."
+//             "Note this may lead to hang with NCCL kernels launched in parallel; if so, try NCCL_LAUNCH_MODE=GROUP");
+// #else
+//         int device_count = 1;
+//         check_cuda_error(cudaGetDeviceCount(&device_count));
+//         cudaMemPool_t mempool;
+//         check_cuda_error(cudaDeviceGetDefaultMemPool(&mempool, device_id));
+//         cudaMemAccessDesc desc                  = {};
+//         int               peer_access_available = 0;
+//         for (int i = 0; i < device_count; i++) {
+//             if (i == device_id) {
+//                 continue;
+//             }
+//             check_cuda_error(cudaDeviceCanAccessPeer(&peer_access_available, device_id, i));
+//             if (!peer_access_available) {
+//                 TM_LOG_WARNING("Device " + std::to_string(device_id) + " peer access Device " + std::to_string(i)
+//                                + " is not available.");
+//                 continue;
+//             }
+//             desc.location.type = cudaMemLocationTypeDevice;
+//             desc.location.id   = i;
+//             desc.flags         = cudaMemAccessFlagsProtReadWrite;
+//             check_cuda_error(cudaMemPoolSetAccess(mempool, &desc, 1));
+//         }
+//         // set memory pool threshold to avoid shrinking the pool
+//         uint64_t setVal = UINT64_MAX;
+//         check_cuda_error(cudaMemPoolSetAttribute(mempool, cudaMemPoolAttrReleaseThreshold, &setVal));
+// #endif
     }
 
     virtual ~Allocator()
@@ -201,12 +201,12 @@ public:
         delete pointer_mapping_;
     }
 
-    void setStream(cudaStream_t stream)
+    void setStream(dipu::deviceStream_t stream)
     {
         stream_ = stream;
     }
 
-    cudaStream_t returnStream()
+    dipu::deviceStream_t returnStream()
     {
         return stream_;
     };
@@ -222,17 +222,18 @@ public:
 
         check_cuda_error(getSetDevice(device_id_, &o_device));
         if (is_host) {
-            check_cuda_error(cudaMallocHost(&ptr, (size_t)(ceil(size / 32.)) * 32));
+            check_cuda_error(dipu::devapis::mallocHost(&ptr, (size_t)(ceil(size / 32.)) * 32));
         }
         else {
-#if defined(CUDA_MEMORY_POOL_DISABLED)
-            check_cuda_error(cudaMalloc(&ptr, (size_t)(ceil(size / 32.)) * 32));
-#else
-            check_cuda_error(cudaMallocAsync(&ptr, (size_t)(ceil(size / 32.)) * 32, stream_));
-#endif
+// #if defined(CUDA_MEMORY_POOL_DISABLED)
+//             check_cuda_error(cudaMalloc(&ptr, (size_t)(ceil(size / 32.)) * 32));
+// #else
+//             check_cuda_error(cudaMallocAsync(&ptr, (size_t)(ceil(size / 32.)) * 32, stream_));
+// #endif
+            check_cuda_error(dipu::devapis::mallocDevice(&ptr, (size_t)(ceil(size / 32.)) * 32));
         }
         if (is_set_zero) {
-            check_cuda_error(cudaMemsetAsync(ptr, 0, (size_t)(ceil(size / 32.)) * 32, stream_));
+            check_cuda_error(dipu::devapis::memSetAsync(stream_, ptr, 0, (size_t)(ceil(size / 32.)) * 32));
         }
         check_cuda_error(getSetDevice(o_device));
         TM_LOG_DEBUG("malloc buffer %p with size %ld", ptr, size);
@@ -253,15 +254,16 @@ public:
                 TM_LOG_DEBUG("Free buffer %p", address);
                 check_cuda_error(getSetDevice(device_id_, &o_device));
                 if (is_host) {
-                    check_cuda_error(cudaFreeHost(*ptr));
+                    check_cuda_error(dipu::devapis::freeHost(*ptr));
                 }
                 else {
-#if defined(CUDA_MEMORY_POOL_DISABLED)
-                    check_cuda_error(cudaFree(*ptr));
-#else
-                    check_cuda_error(cudaFreeAsync(*ptr, stream_));
-                    cudaStreamSynchronize(stream_);
-#endif
+// #if defined(CUDA_MEMORY_POOL_DISABLED)
+//                     check_cuda_error(cudaFree(*ptr));
+// #else
+//                     check_cuda_error(cudaFreeAsync(*ptr, stream_));
+//                     cudaStreamSynchronize(stream_);
+// #endif
+                    check_cuda_error(dipu::devapis::freeDevice(*ptr));
                 }
                 check_cuda_error(getSetDevice(o_device));
                 pointer_mapping_->erase(address);
@@ -276,7 +278,7 @@ public:
 
     void memSet(void* ptr, const int val, const size_t size)
     {
-        check_cuda_error(cudaMemsetAsync(ptr, val, size, stream_));
+        check_cuda_error(dipu::devapis::memSetAsync(stream_, ptr, val, size));
     }
 };
 

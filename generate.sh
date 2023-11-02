@@ -1,4 +1,6 @@
 #!/bin/sh
+# export DIOPI_ROOT=$PWD/3rdparty/DIOPI/impl/lib/
+# export LIBRARY_PATH=$DIOPI_ROOT:$LIBRARY_PATH;
 
 cmake .. \
     -DCMAKE_BUILD_TYPE=RelWithDebInfo \
@@ -7,4 +9,4 @@ cmake .. \
     -DBUILD_PY_FFI=ON \
     -DBUILD_MULTI_GPU=ON \
     -DCMAKE_CUDA_FLAGS="-lineinfo" \
-    -DUSE_NVTX=ON
+    -DUSE_NVTX=OFF

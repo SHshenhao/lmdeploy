@@ -21,4 +21,4 @@ add_library(DynamicDecodeLayer STATIC DynamicDecodeLayer.cc)
 set_property(TARGET DynamicDecodeLayer PROPERTY POSITION_INDEPENDENT_CODE  ON)
 set_property(TARGET DynamicDecodeLayer PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
 target_link_libraries(DynamicDecodeLayer PUBLIC CUDA::cudart TopKSamplingLayer
-        TopPSamplingLayer ban_bad_words stop_criteria gpt_kernels tensor nvtx_utils)
+        TopPSamplingLayer ban_bad_words stop_criteria gpt_kernels tensor nvtx_utils runtime)

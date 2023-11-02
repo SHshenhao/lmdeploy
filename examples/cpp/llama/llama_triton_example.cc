@@ -99,7 +99,7 @@ broadCastRequest(const std::vector<int>& v_start_ids,
 
     std::vector<std::shared_ptr<std::unordered_map<std::string, triton::Tensor>>> request_list;
     for (int device_id = 0; device_id < gpu_count; device_id++) {
-        ft::check_cuda_error(cudaSetDevice(device_id));
+        check_cuda_error(cudaSetDevice(device_id));
 
         int* d_input_ids;
         // int* d_input_lengths;
@@ -316,9 +316,9 @@ int threadCreateModelInstances(std::shared_ptr<AbstractTransformerModel>        
                                std::shared_ptr<ft::AbstractCustomComm> custom_all_reduce_comm = nullptr)
 {
     printf("[INFO] rank = %d \n", rank);
-    ft::check_cuda_error(cudaSetDevice(device_id));
+    check_cuda_error(cudaSetDevice(device_id));
     cudaStream_t stream;
-    ft::check_cuda_error(cudaStreamCreate(&stream));
+    check_cuda_error(cudaStreamCreate(&stream));
     model->createSharedWeights(device_id, rank);
     auto model_instance = model->createModelInstance(device_id, rank, stream, nccl_params, custom_all_reduce_comm);
     model_instances->at(device_id) = std::move(model_instance);
@@ -333,7 +333,7 @@ int threadForward(std::unique_ptr<AbstractTransformerModelInstance>*            
                   const int                                                         device_id,
                   ft::AbstractInstanceComm*                                         comm)
 {
-    ft::check_cuda_error(cudaSetDevice(device_id));
+    check_cuda_error(cudaSetDevice(device_id));
     cudaDeviceSynchronize();
     *output_tensors = (*model_instance)->forward(request, comm);
     cudaDeviceSynchronize();

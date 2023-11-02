@@ -119,7 +119,7 @@ void int8_gemm_test(const int            m,
     ft::Tensor{ft::MEMORY_GPU, ft::TYPE_INT32, {(size_t)m, (size_t)n}, get_ptr<int32_t>(y_gpu_int32)}.saveNpy(
         "y_gpu_int32.npy");
 
-    ft::check_cuda_error(cudaStreamSynchronize(stream));
+    check_cuda_error(cudaStreamSynchronize(stream));
     auto start = high_resolution_clock::now();
 
     for (int i = 0; i < iters; ++i) {
@@ -137,7 +137,7 @@ void int8_gemm_test(const int            m,
                                  stream);
     }
 
-    ft::check_cuda_error(cudaStreamSynchronize(stream));
+    check_cuda_error(cudaStreamSynchronize(stream));
     auto end = high_resolution_clock::now();
 
     auto duration = duration_cast<microseconds>(end - start);

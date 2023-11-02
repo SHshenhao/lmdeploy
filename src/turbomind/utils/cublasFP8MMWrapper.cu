@@ -259,7 +259,7 @@ void cublasFP8MMWrapper::Gemm(__nv_bfloat16*       res,
     }
 
     {
-        cublasStatus_t status = cublasLtMatmul(cublaslt_handle_,
+        check_cuda_error(cublasLtMatmul(cublaslt_handle_,
                                                matmulDesc,
                                                alpha,
                                                kernel,
@@ -274,8 +274,7 @@ void cublasFP8MMWrapper::Gemm(__nv_bfloat16*       res,
                                                (findAlgo ? (&algo) : NULL),
                                                cublas_workspace_,
                                                wsSizeBytes,
-                                               stream);
-        check_cuda_error(status);
+                                               stream));
     }
 
     if (Ddesc) {
@@ -484,7 +483,7 @@ void cublasFP8MMWrapper::Gemm(__nv_fp8_e4m3*       res,
     }
 
     {
-        cublasStatus_t status = cublasLtMatmul(cublaslt_handle_,
+        check_cuda_error(cublasLtMatmul(cublaslt_handle_,
                                                matmulDesc,
                                                alpha,
                                                kernel,
@@ -499,8 +498,7 @@ void cublasFP8MMWrapper::Gemm(__nv_fp8_e4m3*       res,
                                                (findAlgo ? (&algo) : NULL),
                                                cublas_workspace_,
                                                wsSizeBytes,
-                                               stream);
-        check_cuda_error(status);
+                                               stream));
     }
 
     if (Ddesc) {
@@ -724,7 +722,7 @@ void cublasFP8MMWrapper::Gemm_Bias_Act(__nv_bfloat16*       res,
                                                     &returnedAlgoCount));
 
     {
-        cublasStatus_t status = cublasLtMatmul(cublaslt_handle_,
+        check_cuda_error(cublasLtMatmul(cublaslt_handle_,
                                                matmulDesc,
                                                alpha,
                                                kernel,
@@ -739,8 +737,7 @@ void cublasFP8MMWrapper::Gemm_Bias_Act(__nv_bfloat16*       res,
                                                &heuristicResult.algo,
                                                cublas_workspace_,
                                                wsSizeBytes,
-                                               stream);
-        check_cuda_error(status);
+                                               stream));
     }
 
     if (Ddesc) {
@@ -898,7 +895,7 @@ void cublasFP8MMWrapper::Gemm_Bias_Act(__nv_fp8_e4m3*       res,
                                                     &returnedAlgoCount));
 
     {
-        cublasStatus_t status = cublasLtMatmul(cublaslt_handle_,
+        check_cuda_error(cublasLtMatmul(cublaslt_handle_,
                                                matmulDesc,
                                                alpha,
                                                kernel,
@@ -913,8 +910,7 @@ void cublasFP8MMWrapper::Gemm_Bias_Act(__nv_fp8_e4m3*       res,
                                                &heuristicResult.algo,
                                                cublas_workspace_,
                                                wsSizeBytes,
-                                               stream);
-        check_cuda_error(status);
+                                               stream));
     }
 
     if (Ddesc) {
