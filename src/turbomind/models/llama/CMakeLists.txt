@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.8)
 add_subdirectory(fused_multi_head_attention)
 
 find_package(CUDAToolkit REQUIRED)
-
+include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/3rdparty/DIOPI/proto/include")
 add_library(Llama STATIC
         LlamaV2.cc
         LlamaBatch.cc

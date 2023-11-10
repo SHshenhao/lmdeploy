@@ -103,17 +103,13 @@ template<typename T>
 LlamaTritonModel<T>::LlamaTritonModel(size_t      tensor_para_size,
                                       size_t      pipeline_para_size,
                                       int         enable_custom_all_reduce,
-                                      std::string model_dir)//:
-    // tensor_para_size_(tensor_para_size),
-    // pipeline_para_size_(pipeline_para_size),
-    // shared_weights_(std::vector<std::shared_ptr<ft::LlamaWeight<T>>>(ft::getDeviceCount())),
-    // enable_custom_all_reduce_(enable_custom_all_reduce)
+                                      std::string model_dir):
+    tensor_para_size_(tensor_para_size),
+    pipeline_para_size_(pipeline_para_size),
+    shared_weights_(std::vector<std::shared_ptr<ft::LlamaWeight<T>>>(ft::getDeviceCount())),
+    enable_custom_all_reduce_(enable_custom_all_reduce)
 {
     std::cout<<"diopiGetVersion:"<<diopiGetVersion()<<std::endl;
-    tensor_para_size_ = tensor_para_size;
-    pipeline_para_size_ = pipeline_para_size;
-    shared_weights_ = std::vector<std::shared_ptr<ft::LlamaWeight<T>>>(ft::getDeviceCount());
-    enable_custom_all_reduce_ = enable_custom_all_reduce;
     model_dir_ = model_dir;
     const std::string inifile{model_dir + "/config.ini"};
     INIReader         reader = INIReader(inifile);

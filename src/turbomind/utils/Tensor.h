@@ -109,17 +109,18 @@ typedef enum memorytype_enum
 struct Tensor {
     MemoryType          where;
     DataType            type;
-    std::vector<size_t> shape;
+    std::vector<int64_t> shape;
     void*               data;
-    std::vector<size_t> offsets = std::vector<size_t>{};
+    std::vector<int64_t> stride = std::vector<int64_t>{};
+    std::vector<int64_t> offsets = std::vector<int64_t>{};
 
     Tensor();
-    Tensor(const MemoryType _where, const DataType _type, const std::vector<size_t> _shape, const void* _data);
+    Tensor(const MemoryType _where, const DataType _type, const std::vector<int64_t> _shape, const void* _data);
     Tensor(const MemoryType          _where,
            const DataType            _type,
-           const std::vector<size_t> _shape,
+           const std::vector<int64_t> _shape,
            const void*               _data,
-           const std::vector<size_t> _offset);
+           const std::vector<int64_t> _offset);
 
     size_t size() const;
     size_t sizeBytes() const;
@@ -292,15 +293,15 @@ struct Tensor {
     void updateShape(size_t idx, size_t val)
     {
         // TODO: find a better way to update the shape
-        std::vector<size_t>& shape_ref = const_cast<std::vector<size_t>&>(shape);
+        std::vector<int64_t>& shape_ref = const_cast<std::vector<int64_t>&>(shape);
         shape_ref[idx]                 = val;
     }
 
-    Tensor slice(std::vector<size_t> shape, size_t offset = 0) const;
+    Tensor slice(std::vector<int64_t> shape, int64_t offset = 0) const;
 
 private:
     static void parseNpyIntro(FILE*& f_ptr, uint32_t& header_len, uint32_t& start_data);
-    static int  parseNpyHeader(FILE*& f_ptr, uint32_t header_len, DataType& type, std::vector<size_t>& shape);
+    static int  parseNpyHeader(FILE*& f_ptr, uint32_t header_len, DataType& type, std::vector<int64_t>& shape);
 };
 
 class TensorMap {

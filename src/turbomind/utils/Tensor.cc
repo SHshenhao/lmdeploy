@@ -40,22 +40,31 @@ Tensor::Tensor():
     type(TYPE_INVALID),
     shape({}),
     data(nullptr),
+    stride({}),  // for diopi
     offsets({})  // only a record to record offset
 {
 }
 
-Tensor::Tensor(const MemoryType _where, const DataType _type, const std::vector<size_t> _shape, const void* _data):
+Tensor::Tensor(const MemoryType _where, const DataType _type, const std::vector<int64_t> _shape, const void* _data):
     where(_where), type(_type), shape(_shape), data(const_cast<void*>(_data))
 {
+    stride.emplace_back(1);
+    for (size_t i = shape.size()-1; i > 0; i--) {
+        stride.insert(stride.begin(), stride.front() * shape[i]);
+    }
 }
 
 Tensor::Tensor(const MemoryType          _where,
                const DataType            _type,
-               const std::vector<size_t> _shape,
+               const std::vector<int64_t> _shape,
                const void*               _data,
-               const std::vector<size_t> _offset):
+               const std::vector<int64_t> _offset):
     where(_where), type(_type), shape(_shape), data(const_cast<void*>(_data)), offsets(_offset)
 {
+    stride.emplace_back(1);
+    for (size_t i = shape.size()-1; i > 0; i--) {
+        stride.insert(stride.begin(), stride.front() * shape[i]);
+    }
 }
 
 void Tensor::parseNpyIntro(FILE*& f_ptr, uint32_t& header_len, uint32_t& start_data)
@@ -91,7 +100,7 @@ void Tensor::parseNpyIntro(FILE*& f_ptr, uint32_t& header_len, uint32_t& start_d
     start_data = 8 + 2 * npy_major + header_len;
 }
 
-int Tensor::parseNpyHeader(FILE*& f_ptr, uint32_t header_len, DataType& type, std::vector<size_t>& shape)
+int Tensor::parseNpyHeader(FILE*& f_ptr, uint32_t header_len, DataType& type, std::vector<int64_t>& shape)
 {
     char*  header_c = (char*)malloc(header_len * sizeof(char));
     size_t n_elems  = fread((void*)header_c, sizeof(char), header_len, f_ptr);
@@ -136,7 +145,7 @@ int Tensor::parseNpyHeader(FILE*& f_ptr, uint32_t header_len, DataType& type, st
 Tensor Tensor::loadNpy(const std::string& npy_file, const MemoryType where)
 {
     DataType            type;
-    std::vector<size_t> shape;
+    std::vector<int64_t> shape;
 
     FILE* f_ptr = fopen(npy_file.c_str(), "rb");
     if (f_ptr == nullptr) {
@@ -146,11 +155,11 @@ Tensor Tensor::loadNpy(const std::string& npy_file, const MemoryType where)
     parseNpyIntro(f_ptr, header_len, start_data);
     parseNpyHeader(f_ptr, header_len, type, shape);
 
-    const size_t size     = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<size_t>());
+    const int64_t size     = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int64_t>());
     void*        data_cpu = malloc(size * Tensor::getTypeSize(type));
     void*        data     = data_cpu;
 
-    size_t n_elems = fread(data_cpu, Tensor::getTypeSize(type), size, f_ptr);
+    int64_t n_elems = fread(data_cpu, Tensor::getTypeSize(type), size, f_ptr);
     FT_CHECK_WITH_INFO(n_elems == size, "reading tensor failed");
     if (where == MEMORY_GPU) {
         dipu::devapis::mallocDevice(&data, size * Tensor::getTypeSize(type));
@@ -167,7 +176,7 @@ size_t Tensor::size() const
     if (data == nullptr || shape.size() == 0) {
         return 0;
     }
-    return std::accumulate(shape.begin(), shape.end(), (size_t)1, std::multiplies<size_t>());
+    return std::accumulate(shape.begin(), shape.end(), (int64_t)1, std::multiplies<int64_t>());
 }
 
 size_t Tensor::sizeBytes() const
@@ -332,11 +341,11 @@ void Tensor::saveNpy(const std::string& filename) const
     }
 }
 
-Tensor Tensor::slice(std::vector<size_t> shape, size_t offset) const
+Tensor Tensor::slice(std::vector<int64_t> shape, int64_t offset) const
 {
     if (this->data != nullptr) {
-        size_t n_elts        = this->size();
-        size_t n_sliced_elts = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<size_t>());
+        int64_t n_elts        = this->size();
+        int64_t n_sliced_elts = std::accumulate(shape.begin(), shape.end(), 1, std::multiplies<int64_t>());
         FT_CHECK_WITH_INFO(
             n_sliced_elts + offset <= n_elts,
             fmtstr("The number (%ld) of elements of sliced tensor exceeds that (%ld) of the original tensor",

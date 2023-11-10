@@ -34,34 +34,48 @@ DIOPI_RT_API const char* diopiGetVersion() {
 // }
 
 DIOPI_RT_API diopiError_t diopiGetTensorData(diopiTensorHandle_t th, void** pptr) {
-    *pptr = (reinterpret_cast<turbomind::Tensor*>(th))->getPtr<void*>();
+    *pptr = (reinterpret_cast<turbomind::Tensor*>(th))->data;
+    // ::cudaPointerAttributes attributes;
+    // ::cudaPointerGetAttributes(&attributes, *pptr);
+    // if (attributes.type == ::cudaMemoryTypeDevice) {
+    //     printf("The pointer is pointing to device memory.\n");
+    // } else if (attributes.type == ::cudaMemoryTypeHost) {
+    //     printf("The pointer is pointing to host memory.\n");
+    // } else {
+    //     printf("The pointer is not valid.\n");
+    // }
     return diopiSuccess;
 }
 
 DIOPI_RT_API diopiError_t diopiGetTensorDataConst(diopiConstTensorHandle_t th, const void** pptr) {
-    *pptr = (reinterpret_cast<const turbomind::Tensor*>(th))->getPtr<void*>();
+    *pptr = (reinterpret_cast<const turbomind::Tensor*>(th))->data;
+    // ::cudaPointerAttributes attributes;
+    // ::cudaPointerGetAttributes(&attributes, *pptr);
+    // if (attributes.type == ::cudaMemoryTypeDevice) {
+    //     printf("The pointer is pointing to device memory.\n");
+    // } else if (attributes.type == ::cudaMemoryTypeHost) {
+    //     printf("The pointer is pointing to host memory.\n");
+    // } else {
+    //     printf("The pointer is not valid.\n");
+    // }
     return diopiSuccess;
 }
 
 DIOPI_RT_API diopiError_t diopiGetTensorShape(diopiConstTensorHandle_t th, diopiSize_t* size) {
     const turbomind::Tensor* ptr = reinterpret_cast<const turbomind::Tensor*>(th);
-    std::vector<int64_t> shape;
-    for (auto& length: ptr->shape) {
-        shape.emplace_back(length);
-    }
-    diopiSize_t tsize{shape.data(), int64_t(shape.size())};
-    *size = tsize;
+    diopiSize_t new_size;
+    new_size.data = ptr->shape.data();
+    new_size.len = ptr->shape.size();
+    *size = new_size;
     return diopiSuccess;
 }
 
 DIOPI_RT_API diopiError_t diopiGetTensorStride(diopiConstTensorHandle_t th, diopiSize_t* stride) {
     const turbomind::Tensor* ptr = reinterpret_cast<const turbomind::Tensor*>(th);
-    std::vector<int64_t> shape{1};
-    for (size_t i = ptr->shape.size()-1; i >= 1; i--) {
-        shape.insert(shape.begin(), shape.front() * ptr->shape[i]);
-    }
-    diopiSize_t tstride{shape.data(), int64_t(shape.size())};
-    *stride = tstride;
+    diopiSize_t new_stride;
+    new_stride.data = ptr->stride.data();
+    new_stride.len = ptr->stride.size();
+    *stride = new_stride;
     return diopiSuccess;
 }
 
@@ -101,15 +115,18 @@ DIOPI_RT_API diopiError_t diopiRequireTensor(
     const diopiDtype_t dtype, const diopiDevice_t device) {
     turbomind::DataType data_type = diopihelper::toTmDataType[dtype];
     turbomind::MemoryType mem_type = diopihelper::toTmDevice(device);
-    std::vector<size_t> _shape;
+    std::vector<int64_t> _shape;
     int64_t numel = 1;
     for (int64_t i = 0; i < size->len; i++) {
         int64_t dimlength = *(size->data + i);
         _shape.emplace_back(dimlength);
         numel *= dimlength;
+        // std::cout<<i<<":"<<dimlength<<std::endl;
     }
     void* _data;
-    if (mem_type == turbomind::MemoryType::MEMORY_GPU) {
+    if (stride != nullptr && stride->len < 0 && stride->data != nullptr) {
+        _data = reinterpret_cast<void*>(const_cast<int64_t*>(stride->data));
+    } else if (mem_type == turbomind::MemoryType::MEMORY_GPU) {
         dipu::devapis::mallocDevice(&_data, size_t(numel) * turbomind::Tensor::getTypeSize(data_type));
     } else {
         dipu::devapis::mallocHost(&_data, size_t(numel) * turbomind::Tensor::getTypeSize(data_type));

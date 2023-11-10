@@ -122,7 +122,7 @@ std::unique_ptr<DLManagedTensor> TritonTensorToDLManagedTensor(triton::Tensor& t
                        device,
                        (int32_t)(tensor.shape.size()),
                        data_type,
-                       reinterpret_cast<int64_t*>(const_cast<size_t*>(tensor.shape.data())),
+                       reinterpret_cast<int64_t*>(const_cast<int64_t*>(tensor.shape.data())),
                        (int64_t*)(nullptr),
                        0};
 
@@ -207,7 +207,7 @@ std::shared_ptr<triton::Tensor> DLManagedTensorToTritonTensor(DLManagedTensor* t
     auto  where     = getMemoryType(dl_tensor.device);
     auto  dtype     = getDataType(dl_tensor.dtype);
     assert(dl_tensor.ndim > 0);
-    std::vector<size_t> shape(dl_tensor.shape, dl_tensor.shape + dl_tensor.ndim);
+    std::vector<int64_t> shape(dl_tensor.shape, dl_tensor.shape + dl_tensor.ndim);
     auto                data = dl_tensor.data;
 
     return std::make_shared<triton::Tensor>(where, dtype, shape, data);
@@ -265,7 +265,7 @@ PYBIND11_MODULE(_turbomind, m)
         .def_readonly("data", &triton::Tensor::data)
         .def(py::init([](const triton::MemoryType   where,
                          const triton::DataType     type,
-                         const std::vector<size_t>& shape,
+                         const std::vector<int64_t>& shape,
                          const long                 data) {
             auto data_ptr = reinterpret_cast<void*>(data);
             return new triton::Tensor(where, type, shape, data_ptr);
@@ -278,7 +278,7 @@ PYBIND11_MODULE(_turbomind, m)
             "new_type"_a)
         .def(
             "view",
-            [](triton::Tensor* self, std::vector<size_t> new_shape) {
+            [](triton::Tensor* self, std::vector<int64_t> new_shape) {
                 return new triton::Tensor(self->where, self->type, new_shape, self->data);
             },
             "new_shape"_a)

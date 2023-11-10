@@ -307,7 +307,7 @@ if (MEASURE_BUILD_TIME)
 endif()
 
 ########################################
-include_directories(SYSTEM "/home/shenhao/work/lmdeploy/3rdparty/DIOPI/proto/include")
+include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/3rdparty/DIOPI/proto/include")
 
 add_library(transformer-shared SHARED
   $<TARGET_OBJECTS:runtime>

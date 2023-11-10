@@ -206,31 +206,31 @@ LlamaTritonModelInstance<T>::forward(std::shared_ptr<std::unordered_map<std::str
         {"output_ids",
          ft::Tensor{ft::MEMORY_GPU,
                     ft::TYPE_UINT32,
-                    std::vector<size_t>{request_batch_size, beam_width, (size_t)instance_->session_len},
+                    std::vector<int64_t>{request_batch_size, beam_width, instance_->session_len},
                     d_output_ids_}},
         {"sequence_length",
          ft::Tensor{ft::MEMORY_GPU,
                     ft::TYPE_UINT32,
-                    std::vector<size_t>{request_batch_size, beam_width},
+                    std::vector<int64_t>{request_batch_size, beam_width},
                     d_sequence_lengths_}}};
 
     if (input_tensors->count("is_return_log_probs") && *((bool*)input_tensors->at("is_return_log_probs").data)) {
         output_tensors.insert({"output_log_probs",
                                ft::Tensor{ft::MEMORY_GPU,
                                           ft::TYPE_FP32,
-                                          std::vector<size_t>{request_batch_size, beam_width, max_request_output_len},
+                                          std::vector<int64_t>{request_batch_size, beam_width, max_request_output_len},
                                           d_output_log_probs_}});
         output_tensors.insert({"cum_log_probs",
                                ft::Tensor{ft::MEMORY_GPU,
                                           ft::TYPE_FP32,
-                                          std::vector<size_t>{request_batch_size, beam_width},
+                                          std::vector<int64_t>{request_batch_size, beam_width},
                                           d_cum_log_probs_}});
     }
 
     if (is_return_logits) {
         output_tensors.insert(
             {"logits",
-             {ft::MEMORY_GPU, ft::TYPE_FP32, {request_batch_size, max_input_len, vocab_size}, d_output_logits_}});
+             {ft::MEMORY_GPU, ft::TYPE_FP32, {request_batch_size, int64_t(max_input_len), int64_t(vocab_size)}, d_output_logits_}});
     }
 
     try {

@@ -108,10 +108,10 @@ constexpr MemoryType MEMORY_GPU        = ft::MEMORY_GPU;
 struct Tensor {
     const MemoryType          where;
     const DataType            type;
-    const std::vector<size_t> shape;
+    const std::vector<int64_t> shape;
     const void*               data;
 
-    Tensor(const MemoryType _where, const DataType _type, const std::vector<size_t> _shape, const void* _data):
+    Tensor(const MemoryType _where, const DataType _type, const std::vector<int64_t> _shape, const void* _data):
         where(_where), type(_type), shape(_shape), data(_data)
     {
     }

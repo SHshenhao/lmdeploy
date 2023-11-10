@@ -1,8 +1,10 @@
 // Copyright (c) 2023, DeepLink.
 #pragma once
+#include <list>
 
-#include "3rdparty/DIOPI/proto/include/diopi/functions.h"
 #include "3rdparty/DIOPI/proto/include/diopi/diopirt.h"
+#include "3rdparty/DIOPI/proto/include/diopi/functions.h"
+#include "3rdparty/DIOPI/proto/include/diopi/functions_lmdeploy.h"
 // #include <diopi/diopirt.h>
 // #include <diopi/functions.h>
 
@@ -17,7 +19,7 @@ struct diopiContext {
     deviceStream_t stream;
     // 1. use arrays to hold tensor that avoid tensor deleting when leaving scope
     // 2. The address of each array must be fixed, so use list instead of vector
-    std::vector<turbomind::Tensor> arrays;
+    std::list<turbomind::Tensor> arrays;
 
     explicit diopiContext(const deviceStream_t& s) : stream(s) {}
 };

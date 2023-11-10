@@ -261,9 +261,9 @@ void LlamaContextDecoder<T>::forward(std::unordered_map<std::string, Tensor>*   
 
         ////////////////////////////////////////////
         /// feed-forward network
-        TensorMap ffn_inputs{{"ffn_input", {MEMORY_GPU, data_type_, {sess.token_num, hidden_units_}, decoder_output}}};
+        TensorMap ffn_inputs{{"ffn_input", {MEMORY_GPU, data_type_, {int64_t(sess.token_num), int64_t(hidden_units_)}, decoder_output}}};
         TensorMap ffn_outputs{
-            {"ffn_output", {MEMORY_GPU, data_type_, {sess.token_num, hidden_units_}, decoder_output}}};
+            {"ffn_output", {MEMORY_GPU, data_type_, {int64_t(sess.token_num), int64_t(hidden_units_)}, decoder_output}}};
         silu_ffn_layer_->forward(&ffn_outputs, &ffn_inputs, &decoder_layer_weights->at(layer)->ffn_weights);
 
         auto scale_weight = layer < num_layer_ - 1 ? decoder_layer_weights->at(layer + 1)->self_attn_norm_weights :

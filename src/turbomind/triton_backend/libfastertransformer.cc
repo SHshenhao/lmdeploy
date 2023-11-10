@@ -1212,8 +1212,8 @@ void triton_check_inputs(std::shared_ptr<std::unordered_map<std::string, Tensor>
     auto        file       = std::ofstream(fName, std::ios::out);
     if (!file.is_open()) {}
     else {
-        for (size_t i = 0; i < batch_size; i++) {
-            for (size_t j = 0; j < length; j++) {
+        for (auto i = 0; i < batch_size; i++) {
+            for (auto j = 0; j < length; j++) {
                 file << ((uint32_t*)output.data)[i * length + j] << " ";
             }
             file << std::endl;
@@ -1233,7 +1233,7 @@ void ModelInstanceState::BroadcastInputTensors(std::shared_ptr<std::unordered_ma
 
     if (node_id) {
         for (uint input_index = 0; input_index < input_count; input_index++) {
-            std::vector<size_t> batchn_shape;
+            std::vector<int64_t> batchn_shape;
             int64_t             shape_size  = 0;
             int64_t             buffer_size = 1;
             ft::mpi::bcast(&shape_size, 1, ft::mpi::MPI_TYPE_INT64_T, 0, ft::mpi::COMM_WORLD);
@@ -1266,7 +1266,7 @@ void ModelInstanceState::BroadcastInputTensors(std::shared_ptr<std::unordered_ma
     else {
         int input_index = 0;
         for (auto it = (*input_tensors)->begin(); it != (*input_tensors)->end(); ++it) {
-            std::vector<size_t> batchn_shape = it->second.shape;
+            std::vector<int64_t> batchn_shape = it->second.shape;
             int64_t             shape_size   = batchn_shape.size();
             int64_t             buffer_size  = 1;
             ft::mpi::bcast(&shape_size, 1, ft::mpi::MPI_TYPE_INT64_T, 0, ft::mpi::COMM_WORLD);
@@ -1568,7 +1568,7 @@ void ModelInstanceState::SetInputTensors(
 
             // modify batch dimension shape, and sequence length dimension shape after
             // padding
-            std::vector<size_t> batchn_shape(input_shape, input_shape + input_dims_count);
+            std::vector<int64_t> batchn_shape(input_shape, input_shape + input_dims_count);
             if (max_batch_size != 0) {
                 batchn_shape[0] = total_batch_size;
                 batchn_shape[1] = (size_t)param.max_seq_length;
@@ -1597,7 +1597,7 @@ void ModelInstanceState::SetInputTensors(
             batchn_shape[0] = total_batch_size;
         }
 
-        std::vector<size_t> batchn_shape_2(input_shape, input_shape + input_dims_count);
+        std::vector<int64_t> batchn_shape_2(input_shape, input_shape + input_dims_count);
         if (max_batch_size != 0) {
             batchn_shape_2[0] = total_batch_size;
         }
