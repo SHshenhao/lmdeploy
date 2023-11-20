@@ -79,6 +79,12 @@ DataType getTensorType()
     else if (std::is_same<T, int>::value || std::is_same<T, const int>::value) {
         return TYPE_INT32;
     }
+    else if (std::is_same<T, int32_t>::value || std::is_same<T, const int32_t>::value) {
+        return TYPE_INT32;
+    }
+    else if (std::is_same<T, int64_t>::value || std::is_same<T, const int64_t>::value) {
+        return TYPE_INT64;
+    }
     else if (std::is_same<T, int8_t>::value || std::is_same<T, const int8_t>::value) {
         return TYPE_INT8;
     }
@@ -113,14 +119,17 @@ struct Tensor {
     void*               data;
     std::vector<int64_t> stride = std::vector<int64_t>{};
     std::vector<int64_t> offsets = std::vector<int64_t>{};
+    bool preallocated = true;
 
     Tensor();
     Tensor(const MemoryType _where, const DataType _type, const std::vector<int64_t> _shape, const void* _data);
+    Tensor(const MemoryType _where, const DataType _type, const std::vector<int64_t> _shape, const void* _data, const bool _preallocated);
     Tensor(const MemoryType          _where,
            const DataType            _type,
            const std::vector<int64_t> _shape,
            const void*               _data,
            const std::vector<int64_t> _offset);
+    ~Tensor();
 
     size_t size() const;
     size_t sizeBytes() const;

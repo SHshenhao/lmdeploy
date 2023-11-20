@@ -48,9 +48,22 @@ Tensor::Tensor():
 Tensor::Tensor(const MemoryType _where, const DataType _type, const std::vector<int64_t> _shape, const void* _data):
     where(_where), type(_type), shape(_shape), data(const_cast<void*>(_data))
 {
-    stride.emplace_back(1);
-    for (size_t i = shape.size()-1; i > 0; i--) {
-        stride.insert(stride.begin(), stride.front() * shape[i]);
+    if (_data != nullptr) {
+        stride.emplace_back(1);
+        for (size_t i = shape.size()-1; i > 0; i--) {
+            stride.insert(stride.begin(), stride.front() * shape[i]);
+        }
+    } 
+}
+
+Tensor::Tensor(const MemoryType _where, const DataType _type, const std::vector<int64_t> _shape, const void* _data, const bool _preallocated):
+    where(_where), type(_type), shape(_shape), data(const_cast<void*>(_data)), preallocated(_preallocated)
+{
+    if (_data != nullptr) {
+        stride.emplace_back(1);
+        for (size_t i = shape.size()-1; i > 0; i--) {
+            stride.insert(stride.begin(), stride.front() * shape[i]);
+        }
     }
 }
 
@@ -64,6 +77,17 @@ Tensor::Tensor(const MemoryType          _where,
     stride.emplace_back(1);
     for (size_t i = shape.size()-1; i > 0; i--) {
         stride.insert(stride.begin(), stride.front() * shape[i]);
+    }
+}
+
+Tensor::~Tensor()
+{
+    if (!preallocated) {
+        if (where == turbomind::MemoryType::MEMORY_GPU) {
+            dipu::devapis::freeDevice(data);
+        } else {
+            dipu::devapis::freeHost(data);
+        }
     }
 }
 
