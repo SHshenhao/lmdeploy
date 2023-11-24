@@ -84,7 +84,7 @@ void ftNcclAllGather(
 }
 
 template<typename T>
-void ftNcclSend(const T* send_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream)
+void ftNcclSend(T* send_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream)
 {
     TM_LOG_DEBUG("%s start", __PRETTY_FUNCTION__);
 #ifdef BUILD_MULTI_GPU
@@ -94,19 +94,19 @@ void ftNcclSend(const T* send_buf, const int data_size, const int peer, NcclPara
 }
 
 template void
-ftNcclSend(const float* send_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream);
+ftNcclSend(float* send_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream);
 template void
-ftNcclSend(const half* send_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream);
+ftNcclSend(half* send_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream);
 #ifdef ENABLE_BF16
 template void ftNcclSend(
-    const __nv_bfloat16* send_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream);
+    __nv_bfloat16* send_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream);
 #endif
 template void
-ftNcclSend(const int* send_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream);
+ftNcclSend(int* send_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream);
 template void
-ftNcclSend(const bool* send_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream);
+ftNcclSend(bool* send_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream);
 template void
-ftNcclSend(const char* send_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream);
+ftNcclSend(char* send_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream);
 
 template<typename T>
 void ftNcclRecv(T* recv_buf, const int data_size, const int peer, NcclParam nccl_param, dipu::deviceStream_t stream)

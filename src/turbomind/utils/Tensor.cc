@@ -15,13 +15,13 @@
  */
 
 #include "src/turbomind/utils/Tensor.h"
-#include "src/turbomind/utils/cuda_bf16_wrapper.h"
-#include "src/turbomind/utils/cuda_utils.h"
+// #include "src/turbomind/utils/cuda_bf16_wrapper.h"
+// #include "src/turbomind/utils/cuda_utils.h"
 #include "src/turbomind/utils/string_utils.h"
 
 #include "stdlib.h"
-#include <cuda_fp16.h>
-#include <cuda_runtime_api.h>
+// #include <cuda_fp16.h>
+// #include <cuda_runtime_api.h>
 #include <filesystem>
 #include <numeric>
 #include <stdlib.h>
@@ -82,13 +82,13 @@ Tensor::Tensor(const MemoryType          _where,
 
 Tensor::~Tensor()
 {
-    if (!preallocated) {
-        if (where == turbomind::MemoryType::MEMORY_GPU) {
-            dipu::devapis::freeDevice(data);
-        } else {
-            dipu::devapis::freeHost(data);
-        }
-    }
+    // if (!preallocated) {
+    //     if (where == turbomind::MemoryType::MEMORY_GPU) {
+    //         dipu::devapis::freeDevice(data);
+    //     } else {
+    //         dipu::devapis::freeHost(data);
+    //     }
+    // }
 }
 
 void Tensor::parseNpyIntro(FILE*& f_ptr, uint32_t& header_len, uint32_t& start_data)
@@ -322,8 +322,8 @@ void Tensor::saveNpy(const std::string& filename) const
     if (where == MemoryType::MEMORY_GPU) {
         cpu_data     = malloc(tensor_size * Tensor::getTypeSize(type));
         is_data_temp = true;
-        cudaDeviceSynchronize();
-        cudaMemcpy(cpu_data, data, tensor_size * Tensor::getTypeSize(type), cudaMemcpyDeviceToHost);
+        dipu::devapis::syncDevice();
+        dipu::devapis::memCopyD2H(tensor_size * Tensor::getTypeSize(type), cpu_data, data);
     }
 
     const char magic[] = "\x93"

@@ -17,14 +17,15 @@
 #pragma once
 
 #include "src/turbomind/macro.h"
-#include "src/turbomind/utils/cuda_bf16_wrapper.h"
-#include "src/turbomind/utils/cuda_fp8_utils.h"
+// #include "src/turbomind/utils/cuda_bf16_wrapper.h"
+// #include "src/turbomind/utils/cuda_fp8_utils.h"
 #include "src/turbomind/utils/cuda_utils.h"
+#include "src/turbomind/runtime/rthelper.h"
 #include "src/turbomind/utils/string_utils.h"
 
 #include "stdlib.h"
-#include <cuda_fp16.h>
-#include <cuda_runtime_api.h>
+// #include <cuda_fp16.h>
+// #include <cuda_runtime_api.h>
 #include <numeric>
 #include <stdlib.h>
 #include <string>
