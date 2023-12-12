@@ -28,10 +28,9 @@ namespace diopi_helper {
     return tensor == nullptr ? nullptr : toDiopiTensorHandle(*tensor);
 }
 
-// ::diopiGeneratorHandle_t toDiopiGeneratorHandle(::Generator& generator) {
-//     if (!generator.has_value()) return nullptr;
-//         return toDiopiGeneratorHandle(generator.value());
-// }
+::diopiGeneratorHandle_t toDiopiGeneratorHandle(dipu::DIPURawGeneratorImpl& generator) {
+    return reinterpret_cast<::diopiGeneratorHandle_t>(&generator);
+}
 
 turbomind::MemoryType toTmDevice(::diopiDevice_t device) {
     switch (device) {

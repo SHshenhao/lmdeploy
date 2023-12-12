@@ -12,16 +12,6 @@ namespace dipu {
   } \
 }
 
-// #define DIPU_CALLCUDA(Expr)                                                     \
-// {                                                                               \
-//     cudaError_t ret = Expr;                                                     \
-//     bool res = (ret == ::cudaSuccess);                                          \
-//     if (!(res)) {                                                               \
-//       auto msg = std::string("call cuda error, ret = ") + cudaGetErrorString(ret);           \
-//       VENDOR_CHECK(res, msg); \
-//   } \
-// }
-
 #define DIPU_CALLCUDA(Expr)                                                     \
 {                                                                               \
     cudaError_t ret = Expr;                                                     \

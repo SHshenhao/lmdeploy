@@ -32,10 +32,11 @@ message(STATUS "DIPU_PATH:  ${DIPU_PATH}")
 #     runtime/devproxy/*.cpp
 # )
 
+file(GLOB RT_SRC_FILES core/*.cpp)
 file(GLOB DIOPI_RT_FILES diopirt/*.cpp)
 
 # vendor src
-add_subdirectory(vendor/cuda)
+add_subdirectory(vendor/${UsedVendor})
 include_directories(SYSTEM ${VENDOR_INCLUDE_DIRS})
 link_directories(${VENDOR_LIB_DIRS})
 
@@ -55,6 +56,7 @@ link_directories(${VENDOR_LIB_DIRS})
 # )
 
 set(SOURCE_FILES
+    ${RT_SRC_FILES}
     ${DIOPI_RT_FILES}
     ${VENDOR_FILES}
 )
@@ -62,7 +64,9 @@ set(SOURCE_FILES
 # add_library(runtime SHARED ${SOURCE_FILES})
 add_library(runtime SHARED ${SOURCE_FILES})
 set_property(TARGET runtime PROPERTY POSITION_INDEPENDENT_CODE  ON)
-set_property(TARGET runtime PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
+if (${UsedVendor} EQUAL cuda)
+    set_property(TARGET runtime PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
+endif()
 
 # link
 target_link_libraries(runtime ${DIPU_VENDOR_LIB})
@@ -86,7 +90,7 @@ message(STATUS "PROJECT_SOURCE_DIR:  ${PROJECT_SOURCE_DIR}")
 # else()
 #   set(DIOPI_IMPL_LIB diopi_impl)
 # endif()
-set(DIOPI_IMPL_LIB /home/shenhao/work/lmdeploy/3rdparty/DIOPI/impl/lib/libdiopi_impl.so)
+set(DIOPI_IMPL_LIB ${PROJECT_SOURCE_DIR}/3rdparty/DIOPI/impl/lib/libdiopi_impl.so)
 
 # need export LIBRARY_PATH=$DIOPI_ROOT:$LIBRARY_PATH;
 target_link_libraries(runtime  -Wl,--no-as-needed ${DIOPI_IMPL_LIB} -Wl,--as-needed)

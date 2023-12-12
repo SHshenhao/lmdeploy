@@ -35,15 +35,15 @@ DIOPI_RT_API const char* diopiGetVersion() {
 
 DIOPI_RT_API diopiError_t diopiGetTensorData(diopiTensorHandle_t th, void** pptr) {
     *pptr = (reinterpret_cast<turbomind::Tensor*>(th))->data;
-    // ::cudaPointerAttributes attributes;
-    // ::cudaPointerGetAttributes(&attributes, *pptr);
-    // if (attributes.type == ::cudaMemoryTypeDevice) {
-    //     printf("The pointer is pointing to device memory.\n");
-    // } else if (attributes.type == ::cudaMemoryTypeHost) {
-    //     printf("The pointer is pointing to host memory.\n");
-    // } else {
-    //     printf("The pointer is not valid.\n");
-    // }
+    ::cudaPointerAttributes attributes;
+    ::cudaPointerGetAttributes(&attributes, *pptr);
+    if (attributes.type == ::cudaMemoryTypeDevice) {
+        printf("The pointer is pointing to device memory.\n");
+    } else if (attributes.type == ::cudaMemoryTypeHost) {
+        printf("The pointer is pointing to host memory.\n");
+    } else {
+        printf("The pointer is not valid.\n");
+    }
     return diopiSuccess;
 }
 
@@ -124,14 +124,16 @@ DIOPI_RT_API diopiError_t diopiRequireTensor(
         // std::cout<<i<<":"<<dimlength<<std::endl;
     }
     void* _data;
+    bool pre_allocated = false;
     if (stride != nullptr && stride->len < 0 && stride->data != nullptr) {
         _data = reinterpret_cast<void*>(const_cast<int64_t*>(stride->data));
+        pre_allocated = true;
     } else if (mem_type == turbomind::MemoryType::MEMORY_GPU) {
         dipu::devapis::mallocDevice(&_data, size_t(numel) * turbomind::Tensor::getTypeSize(data_type));
     } else {
         dipu::devapis::mallocHost(&_data, size_t(numel) * turbomind::Tensor::getTypeSize(data_type));
     }
-    turbomind::Tensor t{mem_type, data_type, _shape, _data};
+    turbomind::Tensor t{mem_type, data_type, _shape, _data, pre_allocated};
     ctx->arrays.emplace_back(std::move(t));
     *tensor = reinterpret_cast<diopiTensorHandle_t>(&(ctx->arrays.back()));
     return diopiSuccess;
@@ -145,11 +147,18 @@ DIOPI_RT_API diopiError_t diopiRequireBuffer(
 }
 
 DIOPI_RT_API diopiError_t diopiGeneratorGetState(diopiContextHandle_t ctx, diopiConstGeneratorHandle_t th, diopiTensorHandle_t *state) {
-  return diopiSuccess;
+    dipu::DIPURawGeneratorImpl* generator = const_cast<dipu::DIPURawGeneratorImpl*>(reinterpret_cast<const dipu::DIPURawGeneratorImpl*>(th));
+    turbomind::Tensor& tensor = generator->get_state();
+    ctx->arrays.emplace_back(std::move(tensor));
+    *state = reinterpret_cast<diopiTensorHandle_t>(&(ctx->arrays.back()));
+    return diopiSuccess;
 }
 
 DIOPI_RT_API diopiError_t diopiGeneratorSetState(diopiGeneratorHandle_t th, diopiConstTensorHandle_t new_state) {
-  return diopiSuccess;
+    dipu::DIPURawGeneratorImpl* generator = reinterpret_cast<dipu::DIPURawGeneratorImpl*>(th);
+    const turbomind::Tensor* state = reinterpret_cast<const turbomind::Tensor*>(new_state);
+    generator->set_state(*(state));
+    return diopiSuccess;
 }
 
 DIOPI_RT_API diopiError_t diopiRecordStart(const char* record_name, void** record) {

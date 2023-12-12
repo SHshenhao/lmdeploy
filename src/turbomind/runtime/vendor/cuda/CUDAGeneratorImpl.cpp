@@ -1,0 +1,41 @@
+// Copyright (c) 2023, DeepLink.
+#include "../../core/DIPURawGeneratorImpl.h"
+// #include <cassert>
+
+namespace dipu {
+
+static const size_t states_size = 200 * sizeof(4120);
+static const size_t seed_size = sizeof(uint64_t);
+static const size_t offset_size = sizeof(int64_t);
+static const size_t total_size = states_size + seed_size + offset_size;
+
+void DIPURawGeneratorImpl::set_state(const turbomind::Tensor& state) {
+    auto state_size = state.sizeBytes();
+    // assert(state_size == total_size, "RNG state is wrong size");
+
+    char state_tmp_data[total_size];
+    // assert(state.type == turbomind::MemoryType::MEMORY_CPU || state.type == turbomind::MemoryType::MEMORY_CPU_PINNED);
+    turbomind::Tensor state_tmp{state.where, state.type, state.shape, reinterpret_cast<void*>(state_tmp_data)};
+    memcpy(state_tmp_data, state.data, total_size);
+    state_ = state_tmp;
+    state_need_reset_ = false;
+}
+
+void DIPURawGeneratorImpl::update_state() {
+    if (state_need_reset_) {
+        char state_tmp_data[total_size];
+        turbomind::Tensor state_tmp{turbomind::MemoryType::MEMORY_CPU, turbomind::DataType::TYPE_UINT8, {total_size}, reinterpret_cast<void*>(state_tmp_data)};
+        state_ = state_tmp;
+        auto rng_state = state_.getPtr<uint8_t>();
+        // since curandStateMTGP is not used anymore, fill gen_states of THCGenerator with deterministic garbage value of -1
+        // gen_states in THCGenerator struct was an array of curandStateMtgp32s.
+        memset(rng_state, -1, states_size);
+        uint64_t current_seed = this->current_seed();
+        int64_t offset = 0;
+        memcpy(rng_state + states_size, &current_seed, seed_size);
+        memcpy(rng_state + states_size + seed_size, &offset, offset_size);
+        state_need_reset_ = false;
+    }
+}
+
+}  // namespace torch_dipu

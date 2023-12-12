@@ -8,9 +8,10 @@
 // #include <diopi/diopirt.h>
 // #include <diopi/functions.h>
 
-#include "../rthelper.h"
+#include "src/turbomind/runtime/rthelper.h"
+#include "src/turbomind/runtime/core/DIPURawGeneratorImpl.h"
 
-#include "../../utils/Tensor.h"
+#include "src/turbomind/utils/Tensor.h"
 
 using deviceStream_t = dipu::deviceStream_t;
 
@@ -34,7 +35,7 @@ namespace diopi_helper {
 ::diopiConstTensorHandle_t toDiopiTensorHandle(const turbomind::Tensor& tensor);
 ::diopiConstTensorHandle_t toDiopiTensorHandle(const turbomind::Tensor* tensor);
 
-// ::diopiGeneratorHandle_t toDiopiGeneratorHandle(::Generator& generator);
+::diopiGeneratorHandle_t toDiopiGeneratorHandle(DIPURawGeneratorImpl& generator);
 
 static std::map<turbomind::DataType, diopiDtype_t> toDiopiDataType = {
     {turbomind::DataType::TYPE_INVALID, diopiDtype_t::diopi_dtype_unsupported},
