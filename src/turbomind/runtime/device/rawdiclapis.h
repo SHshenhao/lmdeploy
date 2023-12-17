@@ -1,5 +1,5 @@
 #pragma once
-#include "../vendor/cuda/vendorapi.h"
+#include "../vendor/vendorapi.h"
 #include "rawdeviceapis.h"
 
 

@@ -5,8 +5,6 @@
 #include "3rdparty/DIOPI/proto/include/diopi/diopirt.h"
 #include "3rdparty/DIOPI/proto/include/diopi/functions.h"
 #include "3rdparty/DIOPI/proto/include/diopi/functions_lmdeploy.h"
-// #include <diopi/diopirt.h>
-// #include <diopi/functions.h>
 
 #include "src/turbomind/runtime/rthelper.h"
 #include "src/turbomind/runtime/core/DIPURawGeneratorImpl.h"

@@ -3,7 +3,7 @@
 
 #include <cstring>
 
-#include "../vendor/cuda/vendorapi.h"
+#include "../vendor/vendorapi.h"
 #include "basedef.h"
 
 namespace dipu {

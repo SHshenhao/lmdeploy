@@ -117,7 +117,7 @@ struct Tensor {
     MemoryType          where;
     DataType            type;
     std::vector<int64_t> shape;
-    void*               data;
+    void*               data = nullptr;
     std::vector<int64_t> stride = std::vector<int64_t>{};
     std::vector<int64_t> offsets = std::vector<int64_t>{};
     bool preallocated = true;

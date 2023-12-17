@@ -9,7 +9,7 @@ class DIPURawGeneratorImpl {
 public:
   // Constructors
   explicit DIPURawGeneratorImpl();
-  ~DIPURawGeneratorImpl() = default;
+  ~DIPURawGeneratorImpl();
 
   void set_current_seed(uint64_t seed);
   uint64_t current_seed() const;
