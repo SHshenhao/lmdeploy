@@ -17,8 +17,8 @@ void DIPURawGeneratorImpl::set_state(const turbomind::Tensor& state) {
     // assert(state.type == turbomind::MemoryType::MEMORY_CPU || state.type == turbomind::MemoryType::MEMORY_CPU_PINNED);
     turbomind::Tensor state_tmp{state.where, state.type, state.shape, reinterpret_cast<void*>(state_tmp_data)};
     memcpy(state_tmp_data, state.data, total_size);
-    if (state_ != nullptr && state_.data != nullptr) {
-        delete state_.data;
+    if (state_.data != nullptr) {
+        delete(state_.data);
     }
     state_ = state_tmp;
     state_need_reset_ = false;
@@ -28,8 +28,8 @@ void DIPURawGeneratorImpl::update_state() {
     if (state_need_reset_) {
         void* state_tmp_data = new(total_size);
         turbomind::Tensor state_tmp{turbomind::MemoryType::MEMORY_CPU, turbomind::DataType::TYPE_UINT8, {total_size}, reinterpret_cast<void*>(state_tmp_data)};
-        if (state_ != nullptr && state_.data != nullptr) {
-            delete state_.data;
+        if (state_.data != nullptr) {
+            delete(state_.data);
         }
         state_ = state_tmp;
         auto rng_state = state_.getPtr<uint8_t>();

@@ -5,7 +5,7 @@ namespace dipu {
 
 DIPURawGeneratorImpl::~DIPURawGeneratorImpl() {
   if (state_.data != nullptr) {
-    delete state_.data;
+    std::free(state_.data);
   }
 }
 

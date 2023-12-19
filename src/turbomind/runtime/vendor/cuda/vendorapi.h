@@ -2,6 +2,8 @@
 #include <cuda_runtime.h>
 #include <nccl.h>
 #include <cuda_fp16.h>
+// #include "3rdparty/DIOPI/impl/third_party/half/include/half.hpp"
+// using half=half_float::half;
 
 namespace dipu {
 

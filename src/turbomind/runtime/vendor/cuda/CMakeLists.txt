@@ -1,10 +1,11 @@
 # if torch compiled with cuda, find torch do find cuda. compile only cpu not.
 # find_package(CUDA "11.0" REQUIRED)
+find_package(CUDA 11.8 REQUIRED)
 
 # set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
-# find_package(NCCL REQUIRED)
+find_package(NCCL REQUIRED)
 
-# find_package(CUDAToolkit REQUIRED)
+find_package(CUDAToolkit REQUIRED)
 
 if (CUDA_FOUND)
     message(STATUS "Vendor CUDA")
@@ -13,6 +14,7 @@ if (CUDA_FOUND)
     message(STATUS "NVCC Path: ${CUDA_TOOLKIT_ROOT_DIR}/bin")
     message(STATUS "NCCL include Path:  ${NCCL_INCLUDE_DIR}")
     message(STATUS "NCCL lib Path:  ${NCCL_LIBRARIES}")
+    set(CUDA_PATH "${CUDA_INCLUDE_DIRS}/../")
 endif()
 
 set(VENDOR_INCLUDE_DIRS ${CUDA_INCLUDE_DIRS} ${NCCL_INCLUDE_DIR} PARENT_SCOPE)
