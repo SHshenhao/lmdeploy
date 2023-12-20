@@ -29,11 +29,11 @@ protected:
     virtual void freeBuffer()     = 0;
 
 public:
-    DynamicDecodeBaseLayer(cudaStream_t     stream,
-                           cublasMMWrapper* cublas_wrapper,
+    DynamicDecodeBaseLayer(dipu::deviceStream_t      stream,
+                           void* cublas_wrapper,
                            IAllocator*      allocator,
                            bool             is_free_buffer_after_forward,
-                           cudaDeviceProp*  cuda_device_prop):
+                           void*  cuda_device_prop):
         BaseLayer(stream, cublas_wrapper, allocator, is_free_buffer_after_forward, cuda_device_prop){};
     ~DynamicDecodeBaseLayer() = default;
     DynamicDecodeBaseLayer(DynamicDecodeBaseLayer const& dynamic_decode_layer): BaseLayer(dynamic_decode_layer){};

@@ -21,8 +21,8 @@
 
 #include "src/turbomind/models/llama/LlamaDecoder.h"
 #include "src/turbomind/macro.h"
-#include "src/turbomind/models/llama/llama_decoder_kernels.h"
-#include "src/turbomind/models/llama/llama_kernels.h"
+// #include "src/turbomind/models/llama/llama_decoder_kernels.h"
+// #include "src/turbomind/models/llama/llama_kernels.h"
 #include "src/turbomind/models/llama/llama_params.h"
 #include "src/turbomind/models/llama/llama_utils.h"
 
@@ -37,11 +37,11 @@ LlamaDecoder<T>::LlamaDecoder(size_t                      head_num,
                               const LlamaAttentionParams& attn_params,
                               float                       rmsnorm_eps,
                               NcclParam                   tensor_para,
-                              cudaStream_t                stream,
-                              cublasMMWrapper*            cublas_wrapper,
+                              dipu::deviceStream_t                stream,
+                              void*            cublas_wrapper,
                               IAllocator*                 allocator,
                               bool                        is_free_buffer_after_forward,
-                              int                         quant_policy):
+                              int32_t                         quant_policy):
     BaseLayer(stream, cublas_wrapper, allocator, is_free_buffer_after_forward),
     head_num_(head_num),
     size_per_head_(size_per_head),
@@ -60,8 +60,8 @@ template<typename T>
 LlamaDecoder<T>::~LlamaDecoder()
 {
     TM_LOG_DEBUG(__PRETTY_FUNCTION__);
-    delete self_attention_layer_;
-    delete silu_ffn_layer_;
+    // delete self_attention_layer_;
+    // delete silu_ffn_layer_;
 }
 
 template<typename T>
@@ -69,25 +69,32 @@ void LlamaDecoder<T>::initialize(const LlamaAttentionParams& attn_params, size_t
 {
     TM_LOG_DEBUG(__PRETTY_FUNCTION__);
 
-    self_attention_layer_ = new LlamaDecoderSelfAttentionLayer<T>(head_num_,
-                                                                  kv_head_num,
-                                                                  size_per_head_,
-                                                                  attn_params,
-                                                                  tensor_para_,
-                                                                  stream_,
-                                                                  cublas_wrapper_,
-                                                                  allocator_,
-                                                                  is_free_buffer_after_forward_,
-                                                                  quant_policy);
+    attn_head_num_ = head_num_;
+    attn_size_per_head_ = size_per_head_;
+    attn_local_kv_head_num_ = kv_head_num / tensor_para_.world_size_;
+    attn_local_head_num_ = head_num_ / tensor_para_.world_size_;
+    attn_head_n_rep_ = attn_local_head_num_ / attn_local_kv_head_num_;
+    attn_params_ = attn_params;
 
-    silu_ffn_layer_ = new LlamaFfnLayer<T>(head_num_,
-                                           size_per_head_,
-                                           inter_size_,
-                                           tensor_para_,
-                                           stream_,
-                                           cublas_wrapper_,
-                                           allocator_,
-                                           is_free_buffer_after_forward_);
+    // self_attention_layer_ = new LlamaDecoderSelfAttentionLayer<T>(head_num_,
+    //                                                               kv_head_num,
+    //                                                               size_per_head_,
+    //                                                               attn_params,
+    //                                                               tensor_para_,
+    //                                                               stream_,
+    //                                                               cublas_wrapper_,
+    //                                                               allocator_,
+    //                                                               is_free_buffer_after_forward_,
+    //                                                               quant_policy);
+
+    // silu_ffn_layer_ = new LlamaFfnLayer<T>(head_num_,
+    //                                        size_per_head_,
+    //                                        inter_size_,
+    //                                        tensor_para_,
+    //                                        stream_,
+    //                                        cublas_wrapper_,
+    //                                        allocator_,
+    //                                        is_free_buffer_after_forward_);
 }
 
 template<typename T>
@@ -108,43 +115,44 @@ void LlamaDecoder<T>::freeBuffer()
 {
     TM_LOG_DEBUG(__PRETTY_FUNCTION__);
     if (is_allocate_buffer_) {
+        allocator_->free((void**)&workspace_);
         is_allocate_buffer_ = false;
     }
 }
 
-template<typename T>
-void LlamaDecoder<T>::forwardSelfAttn(const LlamaDecoder::Session&                   sess,
-                                      T*                                             attn_io,
-                                      const std::unordered_map<std::string, Tensor>* input_tensors,
-                                      size_t                                         layer)
-{
-    TM_LOG_DEBUG(__PRETTY_FUNCTION__);
-    TensorMap self_attention_input_tensors(*input_tensors);
-    self_attention_input_tensors.insert("input_query",
-                                        {MEMORY_GPU, data_type_, {sess.batch_size, hidden_units_}, attn_io});
-    const int layer_id = layer;
-    self_attention_input_tensors.insert("layer_id", {MEMORY_CPU, TYPE_INT32, {1}, &layer_id});
-    auto& k_cache = *sess.k_cache;
-    auto& v_cache = *sess.v_cache;
+// template<typename T>
+// void LlamaDecoder<T>::forwardSelfAttn(const LlamaDecoder::Session&                   sess,
+//                                       T*                                             attn_io,
+//                                       const std::unordered_map<std::string, Tensor>* input_tensors,
+//                                       size_t                                         layer)
+// {
+//     TM_LOG_DEBUG(__PRETTY_FUNCTION__);
+//     TensorMap self_attention_input_tensors(*input_tensors);
+//     self_attention_input_tensors.insert("input_query",
+//                                         {MEMORY_GPU, data_type_, {sess.batch_size, hidden_units_}, attn_io});
+//     const int layer_id = layer;
+//     self_attention_input_tensors.insert("layer_id", {MEMORY_CPU, TYPE_INT32, {1}, &layer_id});
+//     auto& k_cache = *sess.k_cache;
+//     auto& v_cache = *sess.v_cache;
 
-    TensorMap self_attention_output_tensors{
-        {"attention_output", {MEMORY_GPU, data_type_, {sess.batch_size, hidden_units_}, attn_io}},
-        {"key_cache", k_cache},
-        {"value_cache", v_cache},
-    };
+//     TensorMap self_attention_output_tensors{
+//         {"attention_output", {MEMORY_GPU, data_type_, {sess.batch_size, hidden_units_}, attn_io}},
+//         {"key_cache", k_cache},
+//         {"value_cache", v_cache},
+//     };
 
-    self_attention_layer_->forward(&self_attention_output_tensors,  //
-                                   &self_attention_input_tensors,
-                                   &sess.weights->at(layer)->self_attn_weights);
-}
+//     self_attention_layer_->forward(&self_attention_output_tensors,  //
+//                                    &self_attention_input_tensors,
+//                                    &sess.weights->at(layer)->self_attn_weights);
+// }
 
-template<typename T>
-void LlamaDecoder<T>::forwardFfn(const LlamaDecoder::Session& sess, T* ffn_io, size_t layer)
-{
-    TensorMap ffn_inputs{{"ffn_input", {MEMORY_GPU, data_type_, {sess.batch_size, hidden_units_}, ffn_io}}};
-    TensorMap ffn_outputs{{"ffn_output", {MEMORY_GPU, data_type_, {sess.batch_size, hidden_units_}, ffn_io}}};
-    silu_ffn_layer_->forward(&ffn_outputs, &ffn_inputs, &sess.weights->at(layer)->ffn_weights);
-}
+// template<typename T>
+// void LlamaDecoder<T>::forwardFfn(const LlamaDecoder::Session& sess, T* ffn_io, size_t layer)
+// {
+//     TensorMap ffn_inputs{{"ffn_input", {MEMORY_GPU, data_type_, {sess.batch_size, hidden_units_}, ffn_io}}};
+//     TensorMap ffn_outputs{{"ffn_output", {MEMORY_GPU, data_type_, {sess.batch_size, hidden_units_}, ffn_io}}};
+//     silu_ffn_layer_->forward(&ffn_outputs, &ffn_inputs, &sess.weights->at(layer)->ffn_weights);
+// }
 
 template<typename T>
 void LlamaDecoder<T>::forward(std::vector<Tensor>*                            output_tensors,
@@ -179,7 +187,7 @@ void LlamaDecoder<T>::forward(std::unordered_map<std::string, Tensor>*        ou
      */
 
     // for the shape of key cache, refer to decoder_masked_multihead_attention_template.hpp
-
+    std::cout<<"LlamaDecoder<T>::forward start! :"<<ctx_.arrays.size()<<std::endl;
     Session sess{};
     sess.batch_size = input_tensors->at("decoder_input").shape[0];
     sess.weights    = decoder_layer_weights;
@@ -197,48 +205,160 @@ void LlamaDecoder<T>::forward(std::unordered_map<std::string, Tensor>*        ou
 
     ////////////////////////////////////////////
     /// RMSNorm
-    invokeRootMeanSquareNorm(decoder_output,
-                             decoder_input,
-                             decoder_layer_weights->at(0)->self_attn_norm_weights,
-                             rmsnorm_eps_,
-                             sess.batch_size,
-                             hidden_units_,
-                             stream_);
+    // invokeRootMeanSquareNorm(decoder_output,
+    //                          decoder_input,
+    //                          decoder_layer_weights->at(0)->self_attn_norm_weights,
+    //                          rmsnorm_eps_,
+    //                          sess.batch_size,
+    //                          hidden_units_,
+    //                          stream_);
+    // sync_check_cuda_error();
+
+    turbomind::Tensor inout_tensor = output_tensors->at("decoder_output");
+    diopiTensorHandle_t inout = dipu::diopi_helper::toDiopiTensorHandle(inout_tensor);
+    diopiDevice_t device;
+    diopiGetTensorDevice(inout, &device);
+    diopiDtype_t dtype;
+    diopiGetTensorDtype(inout, &dtype);
+    int64_t itemsize;
+    diopiGetTensorElemSize(inout, &itemsize);
+    diopiContext ctx(stream_);
+    const int64_t step = input_tensors->at("step").getVal<int>();
+    const int64_t max_seq_len = input_tensors->at("max_seq_len").getVal<int>();
+    int64_t max_memory_len = sess.max_memory_len;
+    int64_t ite = sess.ite;
+    int64_t batch_size = sess.batch_size;
+    int64_t local_head_num = attn_local_head_num_;
+    int64_t local_kv_head_num = attn_local_kv_head_num_;
+    int64_t size_per_head = size_per_head_;
+    std::cout<<"local_head_num:"<<local_head_num<<std::endl;
+    std::cout<<"local_kv_head_num:"<<local_kv_head_num<<std::endl;
+    std::cout<<"size_per_head:"<<size_per_head<<std::endl;
+    std::cout<<"dtype:"<<dtype<<" itemsize:"<<itemsize<<std::endl;
+    std::cout<<"max_memory_len:"<<max_memory_len<<std::endl;
+    std::cout<<"ite:"<<ite<<std::endl;
+    std::cout<<"batch_size:"<<batch_size<<std::endl;
+    std::cout<<"num_layer:"<<num_layer_<<std::endl;
+    std::cout<<"step:"<<step<<std::endl;
+    std::cout<<"max_seq_len:"<<max_seq_len<<std::endl;
+    int64_t h_kcache_data[batch_size];
+    int64_t h_vcache_data[batch_size];
+    turbomind::Tensor h_kcache_tensor{MEMORY_CPU, TYPE_INT64, {batch_size}, reinterpret_cast<void*>(h_kcache_data)};
+    turbomind::Tensor h_vcache_tensor{MEMORY_CPU, TYPE_INT64, {batch_size}, reinterpret_cast<void*>(h_vcache_data)};
+    turbomind::Tensor d_kcache_tensor{MEMORY_GPU, TYPE_INT64, {batch_size}, reinterpret_cast<void*>(sess.k_cache->data)};
+    turbomind::Tensor d_vcache_tensor{MEMORY_GPU, TYPE_INT64, {batch_size}, reinterpret_cast<void*>(sess.v_cache->data)};
+    diopiTensorHandle_t h_kcache = dipu::diopi_helper::toDiopiTensorHandle(h_kcache_tensor);
+    diopiTensorHandle_t h_vcache = dipu::diopi_helper::toDiopiTensorHandle(h_vcache_tensor);
+    diopiConstTensorHandle_t kcache = dipu::diopi_helper::toDiopiTensorHandle(d_kcache_tensor);
+    diopiConstTensorHandle_t vcache = dipu::diopi_helper::toDiopiTensorHandle(d_vcache_tensor);
+    diopiLmdeployCopyD2H(&ctx_, h_kcache, kcache, false);
+    diopiLmdeployCopyD2H(&ctx_, h_vcache, vcache, false);
+    // std::cout<<"kvcache prepare"<<std::endl;
+
+    diopiTensorHandle_t key_cache[batch_size];
+    diopiTensorHandle_t value_cache[batch_size];
+    std::vector<int64_t> shape{int64_t(num_layer_), local_kv_head_num, max_seq_len, size_per_head};
+    diopiSize_t newshape{shape.data(), 4};
+    for (int64_t i = 0; i < batch_size; i++) {
+        diopiTensorHandle_t temp_kcache;
+        diopiSize_t temp_kcache_ptr_stride{static_cast<const int64_t*>(reinterpret_cast<int64_t*>(h_kcache_data[i])), -1};
+        diopiRequireTensor(&ctx_, &temp_kcache, &newshape, &temp_kcache_ptr_stride, dtype, device);
+        diopiTensorHandle_t temp_vcache;
+        diopiSize_t temp_vcache_ptr_stride{static_cast<const int64_t*>(reinterpret_cast<int64_t*>(h_vcache_data[i])), -1};
+        diopiRequireTensor(&ctx_, &temp_vcache, &newshape, &temp_vcache_ptr_stride, dtype, device);
+        key_cache[i] = temp_kcache;
+        value_cache[i] = temp_vcache;
+    }
+    std::cout<<"sess.ite:"<<sess.ite<<std::endl;
+    float rotary_embedding_base{attn_params_.rotary_embedding_base};
+    int64_t rotray_embedding_dim{attn_params_.rotray_embedding_dim};
+
+    turbomind::Tensor input_output_tensor = input_tensors->at("decoder_input");
+    diopiTensorHandle_t diopi_input_output = dipu::diopi_helper::toDiopiTensorHandle(input_output_tensor);
+    diopiLmdeployCopyD2D(&ctx_, inout, diopi_input_output, false); // SH RMSNorm
     sync_check_cuda_error();
+
+    const turbomind::Tensor& sequence_lengths_tensor = input_tensors->at("sequence_lengths");
+    diopiConstTensorHandle_t sequence_lengths = dipu::diopi_helper::toDiopiTensorHandle(sequence_lengths_tensor);
+    const turbomind::Tensor& total_padding_tokens_tensor = input_tensors->at("total_padding_tokens");
+    diopiConstTensorHandle_t total_padding_tokens = dipu::diopi_helper::toDiopiTensorHandle(total_padding_tokens_tensor);
+    diopiConstTensorHandle_t finished_data = nullptr;
+    if (input_tensors->find("finished") != input_tensors->end()) {
+        const turbomind::Tensor& finished_data_tensor = input_tensors->at("finished");
+        finished_data = dipu::diopi_helper::toDiopiTensorHandle(finished_data_tensor);
+    }
 
     for (size_t layer = 0; layer < num_layer_; ++layer) {
         // output: self_attn_output_, k_cache, v_cache = self_attn(decoder_normed_input_)
-        forwardSelfAttn(sess, decoder_output, input_tensors, layer);
+        // forwardSelfAttn(sess, decoder_output, input_tensors, layer);
+        turbomind::Tensor weightqkv_tensor{MEMORY_GPU, data_type_, {int64_t(hidden_units_), int64_t((local_head_num+local_kv_head_num*2)*size_per_head)}, sess.weights->at(layer)->self_attn_weights.qkv.kernel};
+        turbomind::Tensor weightbias_tensor{MEMORY_GPU, data_type_, {int64_t(1), int64_t((local_head_num+local_kv_head_num*2)*size_per_head)}, sess.weights->at(layer)->self_attn_weights.qkv.bias};
+        diopiTensorHandle_t weightqkv = dipu::diopi_helper::toDiopiTensorHandle(weightqkv_tensor);
+        diopiTensorHandle_t weightbias = dipu::diopi_helper::toDiopiTensorHandle(weightbias_tensor);
 
-        invokeFusedAddBiasResidualRMSNorm(decoder_input,
-                                          decoder_output,
-                                          decoder_layer_weights->at(layer)->self_attn_weights.output.bias,
-                                          decoder_layer_weights->at(layer)->ffn_norm_weights,
-                                          rmsnorm_eps_,
-                                          sess.batch_size,
-                                          hidden_units_,
-                                          stream_);
+        int64_t workspace_size = -1;
+        diopiFusedDecoderAttentionInp(&ctx_, inout, weightqkv, weightbias, nullptr, &workspace_size, 0, key_cache, value_cache,
+                                        finished_data, total_padding_tokens, sequence_lengths, step, layer, local_head_num,
+                                        local_kv_head_num, size_per_head, max_seq_len, rotray_embedding_dim, rotary_embedding_base);
+        // std::cout<<"workspace_size:"<<workspace_size<<" pre_work_size:"<<pre_work_size<<std::endl;
+        // std::cout<<"rotary_embedding:"<<rotary_embedding<<" rope_theta:"<<rope_theta<<std::endl;
+        workspace_ = allocator_->reMalloc(workspace_, workspace_size);
+        diopiTensorHandle_t workspace;
+        shape[0] = workspace_size;
+        newshape.len = 1;
+        diopiSize_t workspace_stride{static_cast<const int64_t*>(reinterpret_cast<int64_t*>(workspace_)), -1};
+        diopiRequireTensor(&ctx_, &workspace, &newshape, &workspace_stride, dtype, device);
+        // void* temp_ptr;
+        // diopiGetTensorData(workspace, &temp_ptr);
+        // std::cout<<"++diopiFusedDecoderAttentionInp++"<<std::endl;
+        diopiFusedDecoderAttentionInp(&ctx_, inout, weightqkv, weightbias, workspace, &workspace_size, 0, key_cache, value_cache,
+                                        finished_data, total_padding_tokens, sequence_lengths, step, layer, local_head_num,
+                                        local_kv_head_num, size_per_head, max_seq_len, rotray_embedding_dim, rotary_embedding_base);
+
+        turbomind::Tensor weightoutput_tensor{MEMORY_GPU, data_type_, {int64_t(hidden_units_), int64_t(hidden_units_)}, sess.weights->at(layer)->self_attn_weights.output.kernel};
+        diopiTensorHandle_t weightoutput = dipu::diopi_helper::toDiopiTensorHandle(weightoutput_tensor);
+        diopiMm(&ctx_, diopi_input_output, inout, weightoutput);
+
+        // invokeFusedAddBiasResidualRMSNorm(decoder_input,
+        //                                   decoder_output,
+        //                                   decoder_layer_weights->at(layer)->self_attn_weights.output.bias,
+        //                                   decoder_layer_weights->at(layer)->ffn_norm_weights,
+        //                                   rmsnorm_eps_,
+        //                                   sess.batch_size,
+        //                                   hidden_units_,
+        //                                   stream_);
+        diopiLmdeployCopyD2D(&ctx_, inout, diopi_input_output, false); // SH RMSNorm
         sync_check_cuda_error();
 
         // decoder_layer_output_ = ffn(decoder_normed_input_)
-        forwardFfn(sess, decoder_output, layer);
+        // forwardFfn(sess, decoder_output, layer);
+        turbomind::Tensor weight1_tensor{MEMORY_GPU, data_type_, {int64_t(hidden_units_), int64_t(inter_size_)}, sess.weights->at(layer)->ffn_weights.gating.kernel};
+        diopiTensorHandle_t weight1 = dipu::diopi_helper::toDiopiTensorHandle(weight1_tensor);
+        turbomind::Tensor weight3_tensor{MEMORY_GPU, data_type_, {int64_t(hidden_units_), int64_t(inter_size_)}, sess.weights->at(layer)->ffn_weights.intermediate.kernel};
+        diopiTensorHandle_t weight3 = dipu::diopi_helper::toDiopiTensorHandle(weight3_tensor);
+        turbomind::Tensor weight2_tensor{MEMORY_GPU, data_type_, {int64_t(inter_size_), int64_t(hidden_units_)}, sess.weights->at(layer)->ffn_weights.output.kernel};
+        diopiTensorHandle_t weight2 = dipu::diopi_helper::toDiopiTensorHandle(weight2_tensor);
+        diopiFusedSiluFfnInp(&ctx_, inout, weight1, weight2, weight3, workspace, &workspace_size, 0);
 
         auto scale_weight = layer < num_layer_ - 1 ? decoder_layer_weights->at(layer + 1)->self_attn_norm_weights :
                                                      input_tensors->at("output_norm_weight").getPtr<T>();
-        invokeFusedAddBiasResidualRMSNorm(decoder_input,  //
-                                          decoder_output,
-                                          decoder_layer_weights->at(layer)->ffn_weights.output.bias,
-                                          scale_weight,
-                                          rmsnorm_eps_,
-                                          sess.batch_size,
-                                          hidden_units_,
-                                          stream_);
+        // invokeFusedAddBiasResidualRMSNorm(decoder_input,  //
+        //                                   decoder_output,
+        //                                   decoder_layer_weights->at(layer)->ffn_weights.output.bias,
+        //                                   scale_weight,
+        //                                   rmsnorm_eps_,
+        //                                   sess.batch_size,
+        //                                   hidden_units_,
+        //                                   stream_);
+        diopiLmdeployCopyD2D(&ctx_, diopi_input_output, inout, false); // SH RMSNorm
         sync_check_cuda_error();
     }
 
+    dipu::diopi_helper::clearDiopiContextAll(ctx_);
     if (is_free_buffer_after_forward_) {
         freeBuffer();
     }
+    std::cout<<"LlamaDecoder<T>::forward end! :"<<ctx_.arrays.size()<<std::endl;
 }
 
 template class LlamaDecoder<half>;

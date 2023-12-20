@@ -2,7 +2,7 @@
 
 #pragma once
 #include "src/turbomind/utils/Tensor.h"
-#include <cuda_runtime.h>
+// #include <cuda_runtime.h>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -26,13 +26,13 @@ enum CmpMode
     kCmpWrite,
 };
 
-extern CmpMode compare_mode;
+// extern CmpMode compare_mode;
 
-template<typename T>
-void Compare(T* ptr, size_t size, std::string key, CmpMode mode, cudaStream_t stream);
+// template<typename T>
+// void Compare(T* ptr, size_t size, std::string key, CmpMode mode, cudaStream_t stream);
 
-template<typename T>
-void CheckNan(const T* ptr, size_t size, std::string key, cudaStream_t stream);
+// template<typename T>
+// void CheckNan(const T* ptr, size_t size, std::string key, cudaStream_t stream);
 
 namespace detail {
 
@@ -62,7 +62,7 @@ std::string Concat(std::string key, Args&&... args)
 
 std::string format(const std::pair<std::string, Tensor>& p);
 
-size_t curandStateGetSize();
+// size_t curandStateGetSize();
 
 bool isDebug();
 

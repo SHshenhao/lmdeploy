@@ -66,9 +66,12 @@ LlamaWeight<T>::LlamaWeight(size_t     head_num,
 template<typename T>
 LlamaWeight<T>::~LlamaWeight()
 {
-    cudaFree((void*)pre_decoder_embedding_table);
-    cudaFree((void*)output_norm_weight);
-    cudaFree((void*)post_decoder_embedding_kernel);
+    T* pre_decoder_embedding_table_temp = const_cast<T*>(pre_decoder_embedding_table);
+    T* output_norm_weight_temp = const_cast<T*>(output_norm_weight);
+    T* post_decoder_embedding_kernel_temp = const_cast<T*>(post_decoder_embedding_kernel);
+    deviceFree(pre_decoder_embedding_table_temp);
+    deviceFree(output_norm_weight_temp);
+    deviceFree(post_decoder_embedding_kernel_temp); // SH check const T*
 
     pre_decoder_embedding_table   = nullptr;
     post_decoder_embedding_kernel = nullptr;

@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include <curand_kernel.h>
+// #include <curand_kernel.h>
 
 #include "src/turbomind/kernels/penalty_types.h"
 #include "src/turbomind/layers/DynamicDecodeBaseLayer.h"
@@ -35,18 +35,18 @@ protected:
 
     size_t              sampling_workspace_size_;
     void*               sampling_workspace_ = nullptr;
-    curandState_t*      curandstate_buf_    = nullptr;
+    std::vector<dipu::DIPURawGeneratorImpl> curandstate_buf_{};
     unsigned long long* random_seeds_buf_   = nullptr;
 
     float* temperature_buf_        = nullptr;
     float* repetition_penalty_buf_ = nullptr;
-    int*   min_lengths_buf_        = nullptr;
+    int32_t*   min_lengths_buf_        = nullptr;
     bool*  skip_decode_buf_        = nullptr;
     T*     runtime_logits_buf_     = nullptr;
 
     float* temperature_        = nullptr;
     float* repetition_penalty_ = nullptr;
-    int*   min_lengths_        = nullptr;
+    int32_t*   min_lengths_        = nullptr;
     bool*  skip_decode_        = nullptr;
     bool   skip_any_           = false;
 
@@ -59,7 +59,7 @@ protected:
     virtual void allocateBuffer(size_t batch_size, Tensor top_k, Tensor top_p);
 
 public:
-    curandState_t* curandstate_buf()
+    std::vector<dipu::DIPURawGeneratorImpl>& curandstate_buf()
     {
         return curandstate_buf_;
     }
@@ -67,18 +67,18 @@ public:
     BaseSamplingLayer(size_t             max_batch_size,
                       size_t             vocab_size,
                       size_t             vocab_size_padded,
-                      int                end_id,
+                      int32_t                end_id,
                       size_t             top_k,
                       float              top_p,
                       unsigned long long random_seed,  // TODO(bhsueh) delete
                       float              temperature,
                       float              len_penalty,
                       float              repetition_penalty,
-                      cudaStream_t       stream,
-                      cublasMMWrapper*   cublas_wrapper,
+                      dipu::deviceStream_t     stream,
+                      void*   cublas_wrapper,
                       IAllocator*        allocator,
                       bool               is_free_buffer_after_forward,
-                      cudaDeviceProp*    cuda_device_prop);
+                      void*    cuda_device_prop);
 
     BaseSamplingLayer(BaseSamplingLayer const& sampling_layer);
 

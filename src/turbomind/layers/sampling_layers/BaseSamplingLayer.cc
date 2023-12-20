@@ -16,8 +16,8 @@
  */
 
 #include "src/turbomind/layers/sampling_layers/BaseSamplingLayer.h"
-#include "src/turbomind/kernels/sampling_penalty_kernels.h"
-#include "src/turbomind/kernels/sampling_topk_kernels.h"
+// #include "src/turbomind/kernels/sampling_penalty_kernels.h"
+// #include "src/turbomind/kernels/sampling_topk_kernels.h"
 #include "src/turbomind/macro.h"
 #include "src/turbomind/utils/cuda_utils.h"
 #include "src/turbomind/utils/memory_utils.h"
@@ -30,15 +30,15 @@ template<typename T>
 void BaseSamplingLayer<T>::allocateBuffer(size_t batch_size, Tensor top_k, Tensor top_p)
 {
     TM_LOG_DEBUG(__PRETTY_FUNCTION__);
-    curandstate_buf_ = reinterpret_cast<curandState_t*>(
-        allocator_->reMalloc(curandstate_buf_, sizeof(curandState_t) * batch_size, false));
+    // curandstate_buf_ = reinterpret_cast<curandState_t*>(
+    //     allocator_->reMalloc(curandstate_buf_, sizeof(curandState_t) * batch_size, false));
     random_seeds_buf_ = reinterpret_cast<unsigned long long*>(
-        allocator_->reMalloc(random_seeds_buf_, sizeof(unsigned long long) * batch_size, false));
+        allocator_->reMalloc(random_seeds_buf_, sizeof(unsigned long long) * batch_size, false, true));
     temperature_buf_ =
         reinterpret_cast<float*>(allocator_->reMalloc(temperature_buf_, sizeof(float) * batch_size, false));
     repetition_penalty_buf_ =
         reinterpret_cast<float*>(allocator_->reMalloc(repetition_penalty_buf_, sizeof(float) * batch_size, false));
-    min_lengths_buf_ = reinterpret_cast<int*>(allocator_->reMalloc(min_lengths_buf_, sizeof(int) * batch_size, false));
+    min_lengths_buf_ = reinterpret_cast<int32_t*>(allocator_->reMalloc(min_lengths_buf_, sizeof(int32_t) * batch_size, false));
     runtime_logits_buf_ = reinterpret_cast<T*>(
         allocator_->reMalloc(runtime_logits_buf_, sizeof(T) * batch_size * vocab_size_padded_, false));
     skip_decode_buf_ =
@@ -47,7 +47,7 @@ void BaseSamplingLayer<T>::allocateBuffer(size_t batch_size, Tensor top_k, Tenso
     // host buffers.
     temperature_        = (float*)std::realloc((void*)temperature_, batch_size * sizeof(float));
     repetition_penalty_ = (float*)std::realloc((void*)repetition_penalty_, batch_size * sizeof(float));
-    min_lengths_        = (int*)std::realloc((void*)min_lengths_, batch_size * sizeof(int));
+    min_lengths_        = (int32_t*)std::realloc((void*)min_lengths_, batch_size * sizeof(int32_t));
     skip_decode_        = (bool*)std::realloc((void*)skip_decode_, batch_size * sizeof(bool));
 
     is_allocate_buffer_ = true;
@@ -58,7 +58,7 @@ void BaseSamplingLayer<T>::freeBuffer()
 {
     TM_LOG_DEBUG(__PRETTY_FUNCTION__);
     if (is_allocate_buffer_) {
-        allocator_->free((void**)(&curandstate_buf_));
+        // allocator_->free((void**)(&curandstate_buf_));
         allocator_->free((void**)(&random_seeds_buf_));
         allocator_->free((void**)(&temperature_buf_));
         allocator_->free((void**)(&repetition_penalty_buf_));
@@ -77,18 +77,18 @@ template<typename T>
 BaseSamplingLayer<T>::BaseSamplingLayer(size_t             max_batch_size,
                                         size_t             vocab_size,
                                         size_t             vocab_size_padded,
-                                        int                end_id,
+                                        int32_t                end_id,
                                         size_t             top_k,
                                         float              top_p,
                                         unsigned long long random_seed,
                                         float              temperature,
                                         float              len_penalty,
                                         float              repetition_penalty,
-                                        cudaStream_t       stream,
-                                        cublasMMWrapper*   cublas_wrapper,
+                                        dipu::deviceStream_t       stream,
+                                        void*   cublas_wrapper,
                                         IAllocator*        allocator,
                                         bool               is_free_buffer_after_forward,
-                                        cudaDeviceProp*    cuda_device_prop):
+                                        void*    cuda_device_prop):
     DynamicDecodeBaseLayer(stream, cublas_wrapper, allocator, is_free_buffer_after_forward, cuda_device_prop),
     vocab_size_(vocab_size),
     vocab_size_padded_(vocab_size_padded)
@@ -139,19 +139,39 @@ void BaseSamplingLayer<T>::setup(const size_t batch_size, const size_t beam_widt
                                   batch_size,
                                   vec2str(random_seeds.shape).c_str()));
         if (random_seeds.size() == 1) {
-            invokeCurandInitialize(curandstate_buf_, batch_size, random_seeds.getVal<unsigned long long>(), stream_);
-            sync_check_cuda_error();
+            // invokeCurandInitialize(curandstate_buf_, batch_size, random_seeds.getVal<unsigned long long>(), stream_);
+            // sync_check_cuda_error();
+            turbomind::Tensor random_seeds_buf_tensor{MEMORY_CPU_PINNED, random_seeds.type, {int64_t(1)}, random_seeds_buf_};
+            diopiTensorHandle_t diopi_random_seeds_buf = dipu::diopi_helper::toDiopiTensorHandle(random_seeds_buf_tensor);
+            diopiTensorHandle_t diopi_random_seeds= dipu::diopi_helper::toDiopiTensorHandle(random_seeds);
+            diopiLmdeployCopyD2H(&ctx_, diopi_random_seeds_buf, diopi_random_seeds, false);
+            curandstate_buf_.resize(batch_size);
+            for (int64_t i = 0; i < batch_size; i++) {
+                curandstate_buf_[i].set_current_seed(random_seeds_buf_[0]);
+            }
         }
         else {
             unsigned long long* random_seed_ptr = random_seeds.getPtr<unsigned long long>();
-            cudaAutoCpy(random_seeds_buf_, random_seed_ptr, batch_size, stream_);
-            invokeCurandBatchInitialize(curandstate_buf_, batch_size, random_seeds_buf_, stream_);
-            sync_check_cuda_error();
+            // cudaAutoCpy(random_seeds_buf_, random_seed_ptr, batch_size, stream_);
+            // invokeCurandBatchInitialize(curandstate_buf_, batch_size, random_seeds_buf_, stream_);
+            // sync_check_cuda_error();
+            turbomind::Tensor random_seeds_buf_tensor{MEMORY_CPU_PINNED, random_seeds.type, {int64_t(batch_size)}, random_seeds_buf_};
+            diopiTensorHandle_t diopi_random_seeds_buf = dipu::diopi_helper::toDiopiTensorHandle(random_seeds_buf_tensor);
+            diopiTensorHandle_t diopi_random_seeds= dipu::diopi_helper::toDiopiTensorHandle(random_seeds);
+            diopiLmdeployCopyD2H(&ctx_, diopi_random_seeds_buf, diopi_random_seeds, false);
+            curandstate_buf_.resize(batch_size);
+            for (int64_t i = 0; i < batch_size; i++) {
+                curandstate_buf_[i].set_current_seed(random_seeds_buf_[i]);
+            }
         }
     }
     else {
         // Initialize curand states using the default seed 0.
-        invokeCurandInitialize(curandstate_buf_, batch_size, 0, stream_);
+        // invokeCurandInitialize(curandstate_buf_, batch_size, 0, stream_);
+        curandstate_buf_.resize(batch_size);
+        for (int64_t i = 0; i < batch_size; i++) {
+            curandstate_buf_[i].set_current_seed(0);
+        }
     }
 
     // Setup penalties.
@@ -165,7 +185,8 @@ void BaseSamplingLayer<T>::setup(const size_t batch_size, const size_t beam_widt
         std::fill_n(temperature_, batch_size, tp);
     }
     else {
-        cudaAutoCpy(temperature_buf_, temperature.getPtr<float>(), batch_size, stream_);
+        // cudaAutoCpy(temperature_buf_, temperature.getPtr<float>(), batch_size, stream_);
+        dipu::devapis::memCopyH2DAsync(stream_, sizeof(float)*batch_size, temperature_buf_, temperature.getPtr<float>());
         std::copy_n(temperature.getPtr<float>(), batch_size, temperature_);
     }
 
@@ -185,7 +206,8 @@ void BaseSamplingLayer<T>::setup(const size_t batch_size, const size_t beam_widt
             std::fill_n(repetition_penalty_, batch_size, rp);
         }
         else {
-            cudaAutoCpy(repetition_penalty_buf_, repetition_penalty.getPtr<float>(), batch_size, stream_);
+            // cudaAutoCpy(repetition_penalty_buf_, repetition_penalty.getPtr<float>(), batch_size, stream_);
+            dipu::devapis::memCopyH2DAsync(stream_, sizeof(float)*batch_size, repetition_penalty_buf_, repetition_penalty.getPtr<float>());
             std::copy_n(repetition_penalty.getPtr<float>(), batch_size, repetition_penalty_);
         }
     }
@@ -201,7 +223,8 @@ void BaseSamplingLayer<T>::setup(const size_t batch_size, const size_t beam_widt
         std::fill_n(min_lengths_, batch_size, minlen);
     }
     else {
-        cudaAutoCpy(min_lengths_buf_, min_lengths.getPtr<int>(), batch_size, stream_);
+        // cudaAutoCpy(min_lengths_buf_, min_lengths.getPtr<int>(), batch_size, stream_);
+        dipu::devapis::memCopyH2DAsync(stream_, sizeof(int32_t)*batch_size, min_lengths_buf_, min_lengths.getPtr<float>());
         std::copy_n(min_lengths.getPtr<int>(), batch_size, min_lengths_);
     }
 }
@@ -303,31 +326,49 @@ void BaseSamplingLayer<T>::forward(TensorMap* output_tensors, TensorMap* input_t
     const T* embedding_bias =
         input_tensors->isExist("embedding_bias") ? input_tensors->at("embedding_bias").getPtr<T>() : nullptr;
     if (embedding_bias != nullptr || !ALL_OF(temperature_ + ite * local_batch_size, local_batch_size, float, 1.0f)) {
-        invokeBatchApplyTemperaturePenalty(logits,
-                                           embedding_bias,
-                                           temperature_buf_ + ite * local_batch_size,
-                                           local_batch_size,
-                                           vocab_size_,
-                                           vocab_size_padded_,
-                                           stream_);
+        // invokeBatchApplyTemperaturePenalty(logits,
+        //                                    embedding_bias,
+        //                                    temperature_buf_ + ite * local_batch_size,
+        //                                    local_batch_size,
+        //                                    vocab_size_,
+        //                                    vocab_size_padded_,
+        //                                    stream_);
+        turbomind::Tensor logits_tensor{MEMORY_GPU, TYPE_FP32, {local_batch_size, vocab_size_padded_}, logits};
+        turbomind::Tensor temperatures_tensor{MEMORY_GPU, TYPE_FP32, {local_batch_size}, temperature_buf_ + ite * local_batch_size};
+        diopiTensorHandle_t dipoi_logits = dipu::diopi_helper::toDiopiTensorHandle(logits_tensor);
+        diopiConstTensorHandle_t dipoi_temperatures = dipu::diopi_helper::toDiopiTensorHandle(temperatures_tensor); 
+        diopiBatchApplyTemperaturePenaltyInp(&ctx_, dipoi_logits, nullptr, dipoi_temperatures, local_batch_size, vocab_size_, vocab_size_padded_);
     }
     sync_check_cuda_error();
 
     if (step > 1 && repetition_penalty_type_ != RepetitionPenaltyType::None) {
         float default_value = getDefaultPenaltyValue(repetition_penalty_type_);
         if (!ALL_OF(repetition_penalty_ + ite * local_batch_size, local_batch_size, float, default_value)) {
-            invokeBatchApplyRepetitionPenalty(
-                logits,
-                repetition_penalty_buf_ + ite * local_batch_size,
-                output_tensors->at("output_ids").getPtrWithOffset<int>(ite * local_batch_size),
-                batch_size,
-                local_batch_size,
-                vocab_size_padded_,
-                input_tensors->at("input_lengths", Tensor{MEMORY_GPU, TYPE_INT32, {}, nullptr}).getPtr<int>(),
-                max_input_length,
-                step,
-                repetition_penalty_type_,
-                stream_);
+            turbomind::Tensor logits_tensor{MEMORY_GPU, TYPE_FP32, {local_batch_size, vocab_size_padded_}, logits};
+            turbomind::Tensor penalties_tensor{MEMORY_GPU, TYPE_FP32, {local_batch_size}, repetition_penalty_buf_ + ite * local_batch_size};
+            turbomind::Tensor output_ids_tensor{MEMORY_GPU, TYPE_INT32, {step, batch_size}, output_tensors->at("output_ids").getPtrWithOffset<int>(ite * local_batch_size)};
+            auto input_length_ptr = input_tensors->at("input_lengths", Tensor{MEMORY_GPU, TYPE_INT32, {}, nullptr}).getPtr<int32_t>();
+            turbomind::Tensor input_lengths_tensor{MEMORY_GPU, TYPE_INT32, {local_batch_size}, input_length_ptr};
+            diopiTensorHandle_t dipoi_logits = dipu::diopi_helper::toDiopiTensorHandle(logits_tensor);
+            diopiConstTensorHandle_t dipoi_penalties = dipu::diopi_helper::toDiopiTensorHandle(penalties_tensor); 
+            diopiConstTensorHandle_t dipoi_output_ids = dipu::diopi_helper::toDiopiTensorHandle(output_ids_tensor);
+            diopiConstTensorHandle_t dipoi_input_lengths = dipu::diopi_helper::toDiopiTensorHandle(input_lengths_tensor); 
+            diopiBatchApplyRepetitionPenaltyInp(&ctx_, dipoi_logits, dipoi_penalties,
+                                                           dipoi_output_ids, batch_size, vocab_size_padded_,
+                                                           dipoi_input_lengths, max_input_length, step,
+                                                           int64_t(default_value));
+            // invokeBatchApplyRepetitionPenalty(
+            //     logits,
+            //     repetition_penalty_buf_ + ite * local_batch_size,
+            //     output_tensors->at("output_ids").getPtrWithOffset<int>(ite * local_batch_size),
+            //     batch_size,
+            //     local_batch_size,
+            //     vocab_size_padded_,
+            //     input_tensors->at("input_lengths", Tensor{MEMORY_GPU, TYPE_INT32, {}, nullptr}).getPtr<int>(),
+            //     max_input_length,
+            //     step,
+            //     repetition_penalty_type_,
+            //     stream_);
             sync_check_cuda_error();
         }
     }
@@ -338,15 +379,15 @@ void BaseSamplingLayer<T>::forward(TensorMap* output_tensors, TensorMap* input_t
         min_lengths, min_lengths + local_batch_size, [&](int min_length) { return min_length > num_generated_tokens; });
     if (invoke_min_length_penalty) {
         FT_CHECK_WITH_INFO(input_tensors->isExist("end_id"), "Need end_id to apply min length penlaty");
-        invokeMinLengthPenalty(logits,
-                               min_lengths_buf_ + ite * local_batch_size,
-                               input_tensors->getPtr<const int>("end_id"),
-                               output_tensors->getPtr<const int>("sequence_length"),
-                               max_input_length,
-                               local_batch_size,
-                               vocab_size_padded_,
-                               stream_);
-        sync_check_cuda_error();
+        // invokeMinLengthPenalty(logits,
+        //                        min_lengths_buf_ + ite * local_batch_size,
+        //                        input_tensors->getPtr<const int>("end_id"),
+        //                        output_tensors->getPtr<const int>("sequence_length"),
+        //                        max_input_length,
+        //                        local_batch_size,
+        //                        vocab_size_padded_,
+        //                        stream_);
+        // sync_check_cuda_error();
     }
 #undef ALL_OF
 

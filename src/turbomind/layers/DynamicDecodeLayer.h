@@ -38,7 +38,7 @@ protected:
 
     size_t          vocab_size_;
     size_t          vocab_size_padded_;
-    cudaDeviceProp* cuda_device_prop_;
+    void* cuda_device_prop_;
 
     // List of argument names which can have different values in runtime
     // and does not support a batched version of kernel in beam search.
@@ -50,14 +50,14 @@ protected:
                                                          "min_length"};
 
     bool has_diff_runtime_args_ = false;
-    int* h_pinned_finished_sum_ = nullptr;
+    int32_t* h_pinned_finished_sum_ = nullptr;
 
 public:
-    curandState_t* topk_curandstate_buf()
+    std::vector<dipu::DIPURawGeneratorImpl>& topk_curandstate_buf()
     {
         return static_cast<BaseSamplingLayer<T>*>(topk_decode_)->curandstate_buf();
     }
-    curandState_t* topp_curandstate_buf()
+    std::vector<dipu::DIPURawGeneratorImpl>& topp_curandstate_buf()
     {
         return static_cast<BaseSamplingLayer<T>*>(topp_decode_)->curandstate_buf();
     }
@@ -65,11 +65,11 @@ public:
     DynamicDecodeLayer(size_t           vocab_size,
                        size_t           vocab_size_padded,
                        int              end_id,
-                       cudaStream_t     stream,
-                       cublasMMWrapper* cublas_wrapper,
+                       dipu::deviceStream_t     stream,
+                       void* cublas_wrapper,
                        IAllocator*      allocator,
                        bool             is_free_buffer_after_forward,
-                       cudaDeviceProp*  cuda_device_prop);
+                       void*  cuda_device_prop);
 
     ~DynamicDecodeLayer();
     DynamicDecodeLayer(DynamicDecodeLayer const& dynamic_decode_layer);

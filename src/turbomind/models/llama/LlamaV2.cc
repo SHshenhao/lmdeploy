@@ -48,24 +48,24 @@ LlamaV2<T>::LlamaV2(size_t                       head_num,
                     size_t                       vocab_size,
                     const LlamaAttentionParams&  attn_params,
                     float                        norm_eps,
-                    int                          max_batch_size,
-                    int                          max_context_token_num,
-                    int                          session_len,
-                    int                          step_length,
-                    int                          start_id,
-                    int                          end_id,
-                    int                          cache_max_entry_count,
-                    int                          cache_chunk_size,
-                    int                          quant_policy,
+                    int32_t                          max_batch_size,
+                    int32_t                          max_context_token_num,
+                    int32_t                          session_len,
+                    int32_t                          step_length,
+                    int32_t                          start_id,
+                    int32_t                          end_id,
+                    int32_t                          cache_max_entry_count,
+                    int32_t                          cache_chunk_size,
+                    int32_t                          quant_policy,
                     bool                         use_context_fmha,
                     std::shared_ptr<SharedState> shared_state,
                     LlamaWeight<T>*              weights,
                     NcclParam                    tensor_para,
-                    cudaStream_t                 stream,
-                    cublasMMWrapper*             cublas_wrapper,
+                    dipu::deviceStream_t                 stream,
+                    void*             cublas_wrapper,
                     IAllocator*                  allocator,
                     bool                         is_free_buffer_after_forward,
-                    cudaDeviceProp*              cuda_device_prop):
+                    void*              cuda_device_prop):
     head_num_(head_num),
     size_per_head_(size_per_head),
     inter_size_(inter_size),
@@ -80,11 +80,12 @@ LlamaV2<T>::LlamaV2(size_t                       head_num,
     weights_(weights),
     tensor_para_(tensor_para),
     stream_(stream),
+    ctx_(stream),
     cublas_wrapper_(cublas_wrapper),
     allocator_(allocator),
     is_free_buffer_after_forward_(is_free_buffer_after_forward),
     cuda_device_prop_(cuda_device_prop),
-    debug_(isDebug()),
+    debug_(true), // isDebug()
     step_length_(step_length),
     batch_(max_batch_size, max_context_token_num, session_len, this),
     shared_state_(shared_state)
@@ -138,7 +139,7 @@ template<typename T>
 void LlamaV2<T>::initialize(const LlamaAttentionParams& attn_params,
                             size_t                      kv_head_num,
                             bool                        use_context_fmha,
-                            int                         quant_policy)
+                            int32_t                         quant_policy)
 {
     TM_LOG_DEBUG(__PRETTY_FUNCTION__);
 
@@ -182,22 +183,29 @@ void LlamaV2<T>::initialize(const LlamaAttentionParams& attn_params,
 }
 
 template<typename T>
-void LlamaV2<T>::embeddingLookup(T* embeddings, const int* token_ids_buf, int batch_size, int step)
+void LlamaV2<T>::embeddingLookup(T* embeddings, const int32_t* token_ids_buf, int32_t batch_size, int32_t step)
 {
     TM_LOG_DEBUG(__PRETTY_FUNCTION__);
     // ! This kernel can't be used in context decoding
-    invokeEmbeddingLookupPosEncodingPadCount(embeddings,
-                                             weights_->pre_decoder_embedding_table,
-                                             static_cast<T*>(nullptr),  // position encoding
-                                             token_ids_buf,
-                                             static_cast<int*>(nullptr),  // padding count, not used w/o pos-code
-                                             batch_size,
-                                             hidden_units_,
-                                             static_cast<T>(1.),  // scale
-                                             step,                // step, used int index into output_ids_buf_
-                                             batch_size,          // token_num
-                                             0,                   // ite
-                                             stream_);
+    // invokeEmbeddingLookupPosEncodingPadCount(embeddings,
+    //                                          weights_->pre_decoder_embedding_table,
+    //                                          static_cast<T*>(nullptr),  // position encoding
+    //                                          token_ids_buf,
+    //                                          static_cast<int*>(nullptr),  // padding count, not used w/o pos-code
+    //                                          batch_size,
+    //                                          hidden_units_,
+    //                                          static_cast<T>(1.),  // scale
+    //                                          step,                // step, used int index into output_ids_buf_
+    //                                          batch_size,          // token_num
+    //                                          0,                   // ite
+    //                                          stream_);
+    turbomind::Tensor from_tensor {MEMORY_GPU, turbomind::getTensorType<T>(), {batch_size, hidden_units_}, embeddings};
+    turbomind::Tensor embedding_table{MEMORY_GPU, turbomind::getTensorType<T>(), {vocab_size_, hidden_units_}, weights_->pre_decoder_embedding_table}; 
+    turbomind::Tensor all_ids{MEMORY_GPU, turbomind::getTensorType<int32_t>(), {batch_.sessionLen(), batch_size}, token_ids_buf};
+    diopiTensorHandle_t diopi_from_tensor = dipu::diopi_helper::toDiopiTensorHandle(from_tensor);
+    diopiConstTensorHandle_t diopi_embedding_table = dipu::diopi_helper::toDiopiTensorHandle(embedding_table);
+    diopiConstTensorHandle_t diopi_all_ids = dipu::diopi_helper::toDiopiTensorHandle(all_ids);
+    diopiEmbeddingLookupPosEncoding(&ctx_, diopi_from_tensor, diopi_embedding_table, diopi_all_ids, batch_size, hidden_units_, step);
     sync_check_cuda_error();
 }
 
@@ -207,10 +215,10 @@ void LlamaV2<T>::contextDecode(T*         deocder_output,
                                uintptr_t* v_cache_ptr,
                                T*         context_decoder_input_buf,
                                T*         context_decoder_output_buf,
-                               const int* input_ids,
-                               const int* input_length,
-                               const int* history_length,
-                               const int* context_length,
+                               const int32_t* input_ids,
+                               const int32_t* input_length,
+                               const int32_t* history_length,
+                               const int32_t* context_length,
                                size_t     token_num,
                                size_t     max_input_len,
                                size_t     max_context_len,
@@ -223,26 +231,34 @@ void LlamaV2<T>::contextDecode(T*         deocder_output,
         TM_LOG_INFO("context decoding start");
     }
 
-    invokeInputIdsEmbeddingLookupPosEncoding(context_decoder_input_buf,
-                                             nullptr,  // processed somewhere else
-                                             weights_->pre_decoder_embedding_table,
-                                             static_cast<T*>(nullptr),
-                                             pPromptTuningParam<T>{},
-                                             input_ids,
-                                             0,  // only used for position encoding
-                                             token_num,
-                                             token_num,
-                                             1,
-                                             hidden_units_,
-                                             stream_);
+    // invokeInputIdsEmbeddingLookupPosEncoding(context_decoder_input_buf,
+    //                                          nullptr,  // processed somewhere else
+    //                                          weights_->pre_decoder_embedding_table,
+    //                                          static_cast<T*>(nullptr),
+    //                                          pPromptTuningParam<T>{},
+    //                                          input_ids,
+    //                                          0,  // only used for position encoding
+    //                                          token_num,
+    //                                          token_num,
+    //                                          1,
+    //                                          hidden_units_,
+    //                                          stream_);
+    turbomind::Tensor from_tensor {MEMORY_GPU, turbomind::getTensorType<T>(), {token_num, hidden_units_}, context_decoder_input_buf};
+    turbomind::Tensor embedding_table{MEMORY_GPU, turbomind::getTensorType<T>(), {vocab_size_, hidden_units_}, weights_->pre_decoder_embedding_table}; 
+    turbomind::Tensor input_ids_tensor{MEMORY_GPU, turbomind::getTensorType<int32_t>(), {token_num}, input_ids};
+    diopiTensorHandle_t diopi_from_tensor = dipu::diopi_helper::toDiopiTensorHandle(from_tensor);
+    diopiConstTensorHandle_t diopi_embedding_table = dipu::diopi_helper::toDiopiTensorHandle(embedding_table);
+    diopiConstTensorHandle_t diopi_input_ids_tensor = dipu::diopi_helper::toDiopiTensorHandle(input_ids_tensor);
+    diopiInputIdsEmbeddingLookupPosEncoding(&ctx_, diopi_from_tensor, diopi_input_ids_tensor, diopi_embedding_table, token_num, hidden_units_);
     sync_check_cuda_error();
+    dipu::diopi_helper::clearDiopiContextAll(ctx_);
 
     const auto dtype = getTensorType<T>();
     const auto bsz   = batch_size;
 
-    const int max_q_len   = max_input_len;
-    const int max_kv_len  = max_context_len;
-    const int max_seq_len = session_len;
+    const int32_t max_q_len   = max_input_len;
+    const int32_t max_kv_len  = max_context_len;
+    const int32_t max_seq_len = session_len;
 
     std::unordered_map<std::string, Tensor> decoder_input_tensors{
         {"decoder_input", {MEMORY_GPU, dtype, {token_num, hidden_units_}, context_decoder_input_buf}},
@@ -273,11 +289,11 @@ void LlamaV2<T>::decoderForward(T*         decoder_output,
                                 uintptr_t* k_cache_ptr,
                                 uintptr_t* v_cache_ptr,
                                 T*         decoder_input,
-                                const int* sequence_length,
-                                const int* total_padding_count,
+                                const int32_t* sequence_length,
+                                const int32_t* total_padding_count,
                                 bool*      finished,
-                                int        step,
-                                int        ite,
+                                int32_t        step,
+                                int32_t        ite,
                                 size_t     session_len,
                                 size_t     batch_size)
 {
@@ -313,78 +329,101 @@ template<typename T>
 void LlamaV2<T>::postDecodeEmbedding(float* logits, float* local_logits, const T* decoder_output, int batch_size)
 {
     TM_LOG_DEBUG(__PRETTY_FUNCTION__);
-    cudaDataType_t data_type = getCudaDataType<T>();
+    // cudaDataType_t data_type = getCudaDataType<T>();
     float          alpha     = 1.f;
     float          beta      = 0.f;
     if (tensor_para_.world_size_ == 1) {
-        cublas_wrapper_->Gemm(CUBLAS_OP_T,
-                              CUBLAS_OP_N,
-                              vocab_size_,  // n
-                              batch_size,
-                              hidden_units_,  // k
-                              &alpha,
-                              weights_->post_decoder_embedding_kernel,
-                              data_type,
-                              hidden_units_,  // k
-                              decoder_output,
-                              data_type,
-                              hidden_units_,  // k
-                              &beta,
-                              logits,
-                              CUDA_R_32F,
-                              vocab_size_,  // n
-                              CUDA_R_32F,
-                              cublasGemmAlgo_t(-1));
+        // cublas_wrapper_->Gemm(CUBLAS_OP_T,
+        //                       CUBLAS_OP_N,
+        //                       vocab_size_,  // n
+        //                       batch_size,
+        //                       hidden_units_,  // k
+        //                       &alpha,
+        //                       weights_->post_decoder_embedding_kernel,
+        //                       data_type,
+        //                       hidden_units_,  // k
+        //                       decoder_output,
+        //                       data_type,
+        //                       hidden_units_,  // k
+        //                       &beta,
+        //                       logits,
+        //                       CUDA_R_32F,
+        //                       vocab_size_,  // n
+        //                       CUDA_R_32F,
+        //                       cublasGemmAlgo_t(-1));
+        int64_t num{ctx_.arrays.size()};
+        turbomind::DataType dtype = turbomind::getTensorType<T>();
+        turbomind::Tensor decoder_output_tensor {MEMORY_GPU, TYPE_FP32, {batch_size, hidden_units_}, decoder_output};
+        turbomind::Tensor embedding_table{MEMORY_GPU, dtype, {vocab_size_, hidden_units_}, weights_->post_decoder_embedding_kernel}; 
+        turbomind::Tensor logits_tensor{MEMORY_GPU, TYPE_FP32, {batch_size, vocab_size_}, logits};
+        diopiConstTensorHandle_t diopi_decoder_output = dipu::diopi_helper::toDiopiTensorHandle(decoder_output_tensor);
+        diopiTensorHandle_t diopi_embedding_table = dipu::diopi_helper::toDiopiTensorHandle(embedding_table);
+        diopiTensorHandle_t diopi_embedding_table_fp32;
+        std::vector<int64_t> shape{hidden_units_, vocab_size_};
+        diopiSize_t newshape{shape.data(), 2};
+        if (dtype == TYPE_FP32) {
+            diopi_embedding_table_fp32 = diopi_embedding_table;
+        } else {
+            diopiRequireTensor(&ctx_, &diopi_embedding_table_fp32, &newshape, nullptr, diopiDtype_t::diopi_dtype_float32, diopiDevice_t::diopi_device);
+        }
+        diopiTensorHandle_t diopi_logits = dipu::diopi_helper::toDiopiTensorHandle(logits_tensor);
+        diopiTensorHandle_t diopi_embedding_table_temp;
+        diopiRequireTensor(&ctx_, &diopi_embedding_table_temp, &newshape, nullptr, diopiDtype_t::diopi_dtype_float32, diopiDevice_t::diopi_device);
+        diopiTranspose(&ctx_, diopi_embedding_table_temp, diopi_embedding_table_fp32, 1, 0); 
+        diopiMm(&ctx_, diopi_logits, diopi_decoder_output, diopi_embedding_table_temp);
+        dipu::diopi_helper::clearDiopiContextAfterN(ctx_, num);
     }
     else {
-        FT_CHECK(vocab_size_padded_ % tensor_para_.world_size_ == 0);
-        const size_t local_vocab_size = vocab_size_padded_ / tensor_para_.world_size_;
-        cublas_wrapper_->Gemm(CUBLAS_OP_T,
-                              CUBLAS_OP_N,
-                              local_vocab_size,  // n
-                              batch_size,
-                              hidden_units_,  // k
-                              &alpha,
-                              weights_->post_decoder_embedding_kernel
-                                  + tensor_para_.rank_ * local_vocab_size * hidden_units_,
-                              data_type,
-                              hidden_units_,  // k
-                              decoder_output,
-                              data_type,
-                              hidden_units_,  // k
-                              &beta,
-                              local_logits + tensor_para_.rank_ * batch_size * local_vocab_size,
-                              CUDA_R_32F,
-                              local_vocab_size,  // n
-                              CUDA_R_32F,
-                              cublasGemmAlgo_t(-1));
-        {
-            NcclGuard nccl_guard(tensor_para_, stream_);
-            ftNcclAllGather(local_logits,                   // send_buf
-                            local_logits,                   // recv_buf
-                            batch_size * local_vocab_size,  // data_size
-                            tensor_para_.rank_,
-                            tensor_para_,
-                            stream_);
-        }
-        invokeTransposeAxis01(logits, local_logits, tensor_para_.world_size_, batch_size, local_vocab_size, stream_);
-        sync_check_cuda_error();
+        // FT_CHECK(vocab_size_padded_ % tensor_para_.world_size_ == 0);
+        // const size_t local_vocab_size = vocab_size_padded_ / tensor_para_.world_size_;
+        // cublas_wrapper_->Gemm(CUBLAS_OP_T,
+        //                       CUBLAS_OP_N,
+        //                       local_vocab_size,  // n
+        //                       batch_size,
+        //                       hidden_units_,  // k
+        //                       &alpha,
+        //                       weights_->post_decoder_embedding_kernel
+        //                           + tensor_para_.rank_ * local_vocab_size * hidden_units_,
+        //                       data_type,
+        //                       hidden_units_,  // k
+        //                       decoder_output,
+        //                       data_type,
+        //                       hidden_units_,  // k
+        //                       &beta,
+        //                       local_logits + tensor_para_.rank_ * batch_size * local_vocab_size,
+        //                       CUDA_R_32F,
+        //                       local_vocab_size,  // n
+        //                       CUDA_R_32F,
+        //                       cublasGemmAlgo_t(-1));
+        // {
+        //     NcclGuard nccl_guard(tensor_para_, stream_);
+        //     ftNcclAllGather(local_logits,                   // send_buf
+        //                     local_logits,                   // recv_buf
+        //                     batch_size * local_vocab_size,  // data_size
+        //                     tensor_para_.rank_,
+        //                     tensor_para_,
+        //                     stream_);
+        // }
+        // invokeTransposeAxis01(logits, local_logits, tensor_para_.world_size_, batch_size, local_vocab_size, stream_);
+        // sync_check_cuda_error();
     }
+    sync_check_cuda_error();
+    dipu::diopi_helper::clearDiopiContextAll(ctx_);
 }
 
 template<typename T>
-void LlamaV2<T>::dynamicDecode(int*            token_ids,
+void LlamaV2<T>::dynamicDecode(int32_t*            token_ids,
                                bool*           finished,
-                               int*            sequence_length,
+                               int32_t*            sequence_length,
                                bool*           should_stop,
                                TensorMap*      inputs,
                                TensorMap*      outputs,
                                const float*    logits,
                                const uint32_t* seq_limit_len,
-                               const int*      context_length,
-                               const int*      end_ids,
-                               int             step,
-                               int             ite,
+                               const int32_t*      context_length,
+                               const int32_t*      end_ids,
+                               int32_t             step,
+                               int32_t             ite,
                                size_t          max_context_len,
                                size_t          token_ids_len,
                                size_t          batch_size)
@@ -433,10 +472,10 @@ void LlamaV2<T>::dynamicDecode(int*            token_ids,
 }
 
 template<typename T>
-void LlamaV2<T>::internalThreadEntry(int device_id)
+void LlamaV2<T>::internalThreadEntry(int32_t device_id)
 {
-    TM_LOG_INFO("[internalThreadEntry] %d", (int)tensor_para_.rank_);
-    check_cuda_error(cudaSetDevice(device_id));
+    TM_LOG_INFO("[internalThreadEntry] %d", (int32_t)tensor_para_.rank_);
+    check_cuda_error(dipu::devapis::setDevice(device_id));
 
     auto& request_queue  = shared_state_->request_queue;
     auto& infer_requests = shared_state_->infer_requests;
@@ -505,7 +544,7 @@ template<typename T>
 void LlamaV2<T>::start()
 {
     int device_id = -1;
-    check_cuda_error(cudaGetDevice(&device_id));
+    check_cuda_error(device_id = dipu::devapis::current_device());
     internal_thread_ = std::thread(&LlamaV2<T>::internalThreadEntry, this, device_id);
 }
 

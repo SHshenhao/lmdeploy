@@ -54,7 +54,7 @@ AbstractTransformerModel::createNcclParams(const int node_id, const int device_i
 
             ft::NcclUid tensor_para_nccl_uid = nccl_ids[pipeline_para_rank];
             // ft::check_cuda_error(cudaSetDevice(gid));
-            check_cuda_error(cudaSetDevice(gid));
+            check_cuda_error(dipu::devapis::setDevice(gid));
             ft::ftNcclCommInitRank(
                 tensor_para_params[gid - device_id_start], tensor_para_rank, tensor_para_size, tensor_para_nccl_uid);
             tensor_para_params[gid - device_id_start].group_id_ = group_id;
@@ -71,7 +71,7 @@ AbstractTransformerModel::createNcclParams(const int node_id, const int device_i
 
             ft::NcclUid pipeline_para_nccl_uid = nccl_ids[pipeline_para_size + tensor_para_rank];
             // ft::check_cuda_error(cudaSetDevice(gid));
-            check_cuda_error(cudaSetDevice(gid));
+            check_cuda_error(dipu::devapis::setDevice(gid));
             ft::ftNcclCommInitRank(pipeline_para_params[gid - device_id_start],
                                    pipeline_para_rank,
                                    pipeline_para_size,

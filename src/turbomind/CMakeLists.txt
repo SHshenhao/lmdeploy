@@ -11,15 +11,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+include_directories("/usr/local/cuda/include")
 add_subdirectory(runtime)
 add_subdirectory(utils)
-add_subdirectory(kernels)
+# add_subdirectory(kernels)
 add_subdirectory(layers)
 add_subdirectory(models)
-if(BUILD_PYT)
-    add_subdirectory(th_op)
-endif()
+# if(BUILD_PYT)
+#     add_subdirectory(th_op)
+# endif()
 if(BUILD_PY_FFI)
     add_subdirectory(python)
 endif()

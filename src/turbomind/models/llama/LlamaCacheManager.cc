@@ -81,7 +81,7 @@ auto LlamaCacheManager::create(uint64_t id, cudaStream_t stream) -> Sequence
     }
 
     const auto mem_ptr = (uint8_t*)allocate(false);
-    check_cuda_error(cudaMemsetAsync(mem_ptr, 0, cache_byte_size_ * 2, stream));
+    check_cuda_error(dipu::devapis::memSetAsync(stream, mem_ptr, 0, cache_byte_size_ * 2));
 
     device_cache_.push_back({
         id,
@@ -119,7 +119,7 @@ auto LlamaCacheManager::fetch(uint64_t id, cudaStream_t stream) -> Sequence
     if (entry->k_cache == nullptr) {
         FT_CHECK(entry->cache_len == 0);
         const auto mem_ptr = allocate(false);
-        check_cuda_error(cudaMemsetAsync(mem_ptr, 0, cache_byte_size_ * 2, stream));
+        check_cuda_error(dipu::devapis::memSetAsync(stream, mem_ptr, 0, cache_byte_size_ * 2));
         entry->k_cache = mem_ptr;
         entry->v_cache = (uint8_t*)entry->k_cache + cache_byte_size_;
     }

@@ -11,7 +11,7 @@ sentencepiece
 setuptools
 shortuuid
 tiktoken
-torch==2.0.0+cpu
+# torch==2.0.0+cpu
 transformers>=4.33.0
 tritonclient[all]
 uvicorn

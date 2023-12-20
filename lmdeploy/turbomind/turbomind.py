@@ -63,10 +63,12 @@ def _tm_dict_to_torch_dict(tm_dict: _tm.TensorMap):
 
 @contextmanager
 def cuda_ctx(device_id):
-    old_device = torch.cuda.current_device()
-    torch.cuda.set_device(device_id)
+    # old_device = torch.cuda.current_device()
+    # torch.cuda.set_device(device_id)
+    pass
     yield
-    torch.cuda.set_device(old_device)
+    # torch.cuda.set_device(old_device)
+    pass
 
 
 class TurboMind:

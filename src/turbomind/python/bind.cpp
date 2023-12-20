@@ -1,10 +1,10 @@
-#include "src/turbomind/kernels/gemm_s_f16/format.h"
+// #include "src/turbomind/kernels/gemm_s_f16/format.h"
 #include "src/turbomind/python/dlpack.h"
 #include "src/turbomind/triton_backend/llama/LlamaTritonModel.h"
 #include "src/turbomind/triton_backend/transformer_triton_backend.hpp"
 #include "src/turbomind/utils/cuda_utils.h"
 #include "src/turbomind/utils/nccl_utils.h"
-#include <cuda_runtime.h>
+// #include <cuda_runtime.h>
 #include <memory>
 #include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
@@ -32,11 +32,11 @@ std::shared_ptr<T> make_shared_nodel(T data)
 DLDevice getDLDevice(triton::Tensor& tensor)
 {
     int device_id = 0;
-    if (tensor.where == triton::MEMORY_GPU) {
-        cudaPointerAttributes ptr_attr;
-        cudaPointerGetAttributes(&ptr_attr, tensor.data);
-        device_id = ptr_attr.device;
-    }
+    // if (tensor.where == triton::MEMORY_GPU) {
+    //     cudaPointerAttributes ptr_attr;
+    //     cudaPointerGetAttributes(&ptr_attr, tensor.data);
+    //     device_id = ptr_attr.device;
+    // }
 
     DLDevice device{kDLCPU, device_id};
 
@@ -227,8 +227,8 @@ PYBIND11_MODULE(_turbomind, m)
         .def(py::init<int, int>(), "rank"_a = 0, "world_size"_a = 1)
         .def("__str__", &ft::NcclParam::toString);
 
-    // custom comm
-    py::class_<ft::AbstractCustomComm, std::shared_ptr<ft::AbstractCustomComm>>(m, "AbstractCustomComm");
+    // // custom comm
+    // py::class_<ft::AbstractCustomComm, std::shared_ptr<ft::AbstractCustomComm>>(m, "AbstractCustomComm");
 
     // instance comm
     py::class_<ft::AbstractInstanceComm>(m, "AbstractInstanceComm");
@@ -342,7 +342,7 @@ PYBIND11_MODULE(_turbomind, m)
             [](std::string model_dir,
                size_t      tensor_para_size,
                size_t      pipeline_para_size,
-               int         enable_custom_all_reduce,
+               int32_t         enable_custom_all_reduce,
                std::string data_type) -> std::shared_ptr<AbstractTransformerModel> {
                 auto gil_control = [state = PyGILState_STATE{}](int op) mutable {
                     if (op) {
@@ -375,32 +375,32 @@ PYBIND11_MODULE(_turbomind, m)
              "node_id"_a,
              "device_id_start"_a = 0,
              "multi_node"_a      = false)
-        .def(
-            "create_custom_comms",
-            [](AbstractTransformerModel* model, int world_size) {
-                std::vector<std::shared_ptr<ft::AbstractCustomComm>> ret;
-                model->createCustomComms(&ret, world_size);
-                return ret;
-            },
-            "world_size"_a)
+        // .def(
+        //     "create_custom_comms",
+        //     [](AbstractTransformerModel* model, int world_size) {
+        //         std::vector<std::shared_ptr<ft::AbstractCustomComm>> ret;
+        //         model->createCustomComms(&ret, world_size);
+        //         return ret;
+        //     },
+        //     "world_size"_a)
         .def("create_instance_comm", &AbstractTransformerModel::createInstanceComm, "size"_a)
         .def(
             "create_model_instance",
             [](AbstractTransformerModel*                                         model,
-               int                                                               deviceId,
-               int                                                               rank,
+               int32_t                                                               deviceId,
+               int32_t                                                               rank,
                long                                                              stream_id,
-               std::pair<std::vector<ft::NcclParam>, std::vector<ft::NcclParam>> nccl_params,
-               std::shared_ptr<ft::AbstractCustomComm>                           custom_all_reduce_comm = nullptr) {
-                cudaStream_t stream = reinterpret_cast<cudaStream_t>(stream_id);
-                return model->createModelInstance(deviceId, rank, stream, nccl_params, custom_all_reduce_comm);
+               std::pair<std::vector<ft::NcclParam>, std::vector<ft::NcclParam>> nccl_params)  {
+            //    std::shared_ptr<ft::AbstractCustomComm>                           custom_all_reduce_comm = nullptr) {
+                dipu::deviceStream_t stream = reinterpret_cast<dipu::deviceStream_t>(stream_id);
+                return model->createModelInstance(deviceId, rank, stream, nccl_params, nullptr);
             },
             py::call_guard<py::gil_scoped_release>(),
             "device_id"_a,
             "rank"_a,
             "stream"_a,
-            "nccl_params"_a,
-            "custom_all_reduce_comm"_a = nullptr)
+            "nccl_params"_a)
+            // "custom_all_reduce_comm"_a = nullptr)
         .def("create_shared_weights",
              &AbstractTransformerModel::createSharedWeights,
              py::call_guard<py::gil_scoped_release>(),
@@ -411,56 +411,56 @@ PYBIND11_MODULE(_turbomind, m)
         .def("get_tensor_para_size", &AbstractTransformerModel::getTensorParaSize)
         .def("get_pipeline_para_size", &AbstractTransformerModel::getPipelineParaSize);
 
-    m.def("transpose_qk_s4_k_m8", [](py::object src, py::object dst, int m, int k, int size_per_head) {
-        auto src_tensor = GetDLTensor(src);
-        auto dst_tensor = GetDLTensor(dst);
+    // m.def("transpose_qk_s4_k_m8", [](py::object src, py::object dst, int m, int k, int size_per_head) {
+    //     auto src_tensor = GetDLTensor(src);
+    //     auto dst_tensor = GetDLTensor(dst);
 
-        turbomind::transpose_qk_s4_k_m8_hf(
-            (uint32_t*)dst_tensor.data, (const uint32_t*)src_tensor.data, m, k, size_per_head, nullptr);
-    });
+    //     turbomind::transpose_qk_s4_k_m8_hf(
+    //         (uint32_t*)dst_tensor.data, (const uint32_t*)src_tensor.data, m, k, size_per_head, nullptr);
+    // });
 
-    m.def("fuse_w1_w3_s4_k_m8", [](py::object src, py::object dst, int m, int k) {
-        auto src_tensor = GetDLTensor(src);
-        auto dst_tensor = GetDLTensor(dst);
+    // m.def("fuse_w1_w3_s4_k_m8", [](py::object src, py::object dst, int m, int k) {
+    //     auto src_tensor = GetDLTensor(src);
+    //     auto dst_tensor = GetDLTensor(dst);
 
-        turbomind::fuse_w1_w3_s4_k_m8((uint32_t*)dst_tensor.data, (const uint32_t*)src_tensor.data, m, k, nullptr);
-    });
+    //     turbomind::fuse_w1_w3_s4_k_m8((uint32_t*)dst_tensor.data, (const uint32_t*)src_tensor.data, m, k, nullptr);
+    // });
 
-    m.def("convert_s4_k_m8",
-          [](py::object A_dst,
-             py::object Q_dst,
-             py::object ws,
-             py::object A_src,
-             py::object scales,
-             py::object qzeros,
-             int        m,
-             int        k,
-             int        group_size) {
-              auto a_dst = GetDLTensor(A_dst);
-              auto q_dst = GetDLTensor(Q_dst);
-              auto w     = GetDLTensor(ws);
-              auto a_src = GetDLTensor(A_src);
-              auto s     = GetDLTensor(scales);
-              auto qz    = GetDLTensor(qzeros);
+    // m.def("convert_s4_k_m8",
+    //       [](py::object A_dst,
+    //          py::object Q_dst,
+    //          py::object ws,
+    //          py::object A_src,
+    //          py::object scales,
+    //          py::object qzeros,
+    //          int        m,
+    //          int        k,
+    //          int        group_size) {
+    //           auto a_dst = GetDLTensor(A_dst);
+    //           auto q_dst = GetDLTensor(Q_dst);
+    //           auto w     = GetDLTensor(ws);
+    //           auto a_src = GetDLTensor(A_src);
+    //           auto s     = GetDLTensor(scales);
+    //           auto qz    = GetDLTensor(qzeros);
 
-              turbomind::convert_s4_k_m8((uint32_t*)a_dst.data,
-                                         (half2*)q_dst.data,
-                                         (half*)w.data,
-                                         (const uint32_t*)a_src.data,
-                                         (const half*)s.data,
-                                         (const uint32_t*)qz.data,
-                                         m,
-                                         k,
-                                         group_size,
-                                         nullptr);
-          });
+    //           turbomind::convert_s4_k_m8((uint32_t*)a_dst.data,
+    //                                      (half2*)q_dst.data,
+    //                                      (half*)w.data,
+    //                                      (const uint32_t*)a_src.data,
+    //                                      (const half*)s.data,
+    //                                      (const uint32_t*)qz.data,
+    //                                      m,
+    //                                      k,
+    //                                      group_size,
+    //                                      nullptr);
+    //       });
 
-    m.def("dequantize_s4", [](py::object src, py::object dst) {
-        auto src_tensor = GetDLTensor(src);
-        auto dst_tensor = GetDLTensor(dst);
-        auto src_count  = std::accumulate(src_tensor.shape, src_tensor.shape + src_tensor.ndim, size_t{1});
-        auto dst_count  = std::accumulate(dst_tensor.shape, dst_tensor.shape + dst_tensor.ndim, size_t{1});
-        turbomind::FT_CHECK(src_count * 8 == dst_count);
-        turbomind::dequantize_s4((uint4*)dst_tensor.data, (uint32_t*)src_tensor.data, src_count, nullptr);
-    });
+    // m.def("dequantize_s4", [](py::object src, py::object dst) {
+    //     auto src_tensor = GetDLTensor(src);
+    //     auto dst_tensor = GetDLTensor(dst);
+    //     auto src_count  = std::accumulate(src_tensor.shape, src_tensor.shape + src_tensor.ndim, size_t{1});
+    //     auto dst_count  = std::accumulate(dst_tensor.shape, dst_tensor.shape + dst_tensor.ndim, size_t{1});
+    //     turbomind::FT_CHECK(src_count * 8 == dst_count);
+    //     turbomind::dequantize_s4((uint4*)dst_tensor.data, (uint32_t*)src_tensor.data, src_count, nullptr);
+    // });
 }

@@ -39,7 +39,7 @@ std::shared_ptr<AbstractTransformerModel> AbstractTransformerModel::createLlamaM
     }
 
     const std::string data_type        = reader.Get("ft_instance_hyperparameter", "data_type");
-    int               tensor_para_size = reader.GetInteger("ft_instance_hyperparameter", "tensor_para_size");
+    int32_t               tensor_para_size = reader.GetInteger("ft_instance_hyperparameter", "tensor_para_size");
     std::string       model_dir        = reader.Get("ft_instance_hyperparameter", "model_dir");
 
     if (data_type == "half" || data_type == "fp16") {
@@ -109,7 +109,7 @@ LlamaTritonModel<T>::LlamaTritonModel(size_t      tensor_para_size,
     shared_weights_(std::vector<std::shared_ptr<ft::LlamaWeight<T>>>(ft::getDeviceCount())),
     enable_custom_all_reduce_(enable_custom_all_reduce)
 {
-    std::cout<<"diopiGetVersion:"<<diopiGetVersion()<<std::endl;
+    std::cout<<"diopiGetVersion:"<<diopiGetVersion()<<std::endl; // for flag
     model_dir_ = model_dir;
     const std::string inifile{model_dir + "/config.ini"};
     INIReader         reader = INIReader(inifile);
@@ -179,44 +179,44 @@ LlamaTritonModel<T>::LlamaTritonModel(size_t      tensor_para_size,
 
 template<typename T>
 std::unique_ptr<LlamaTritonSharedModelInstance<T>> LlamaTritonModel<T>::createSharedModelInstance(
-    int                                                               device_id,
-    int                                                               rank,
+    int32_t                                                               device_id,
+    int32_t                                                               rank,
     std::pair<std::vector<ft::NcclParam>, std::vector<ft::NcclParam>> nccl_params,
     std::shared_ptr<ft::AbstractCustomComm>                           custom_all_reduce_comm)
 {
-    check_cuda_error(cudaSetDevice(device_id));
-    const int comms_rank = device_id % (tensor_para_size_ * pipeline_para_size_);
+    check_cuda_error(dipu::devapis::setDevice(device_id));
+    const int32_t comms_rank = device_id % (tensor_para_size_ * pipeline_para_size_);
 
     std::unique_ptr<ft::Allocator<ft::AllocatorType::CUDA>> allocator(
         new ft::Allocator<ft::AllocatorType::CUDA>(device_id));
 
     /// TODO: this stream handle is leaked
-    cudaStream_t stream{};
-    check_cuda_error(cudaStreamCreate(&stream));
+    dipu::deviceStream_t stream{};
+    check_cuda_error(dipu::devapis::createStream(&stream));
 
     allocator->setStream(stream);
 
-    cublasHandle_t   cublas_handle;
-    cublasLtHandle_t cublaslt_handle;
+    // cublasHandle_t   cublas_handle;
+    // cublasLtHandle_t cublaslt_handle;
 
-    cublasCreate(&cublas_handle);
-    cublasLtCreate(&cublaslt_handle);
-    cublasSetStream(cublas_handle, stream);
+    // cublasCreate(&cublas_handle);
+    // cublasLtCreate(&cublaslt_handle);
+    // cublasSetStream(cublas_handle, stream);
 
-    std::unique_ptr<ft::cublasAlgoMap>   cublas_algo_map(new ft::cublasAlgoMap("gemm_config.in"));
-    std::unique_ptr<std::mutex>          cublas_wrapper_mutex(new std::mutex());
-    std::unique_ptr<ft::cublasMMWrapper> cublas_wrapper(new ft::cublasMMWrapper(
-        cublas_handle, cublaslt_handle, stream, cublas_algo_map.get(), cublas_wrapper_mutex.get(), allocator.get()));
+    // std::unique_ptr<ft::cublasAlgoMap>   cublas_algo_map(new ft::cublasAlgoMap("gemm_config.in"));
+    // std::unique_ptr<std::mutex>          cublas_wrapper_mutex(new std::mutex());
+    // std::unique_ptr<ft::cublasMMWrapper> cublas_wrapper(new ft::cublasMMWrapper(
+    //     cublas_handle, cublaslt_handle, stream, cublas_algo_map.get(), cublas_wrapper_mutex.get(), allocator.get()));
 
-    std::unique_ptr<cudaDeviceProp> cuda_device_prop_ptr(new cudaDeviceProp);
-    check_cuda_error(cudaGetDeviceProperties(cuda_device_prop_ptr.get(), device_id));
+    // std::unique_ptr<cudaDeviceProp> cuda_device_prop_ptr(new cudaDeviceProp);
+    // check_cuda_error(cudaGetDeviceProperties(cuda_device_prop_ptr.get(), device_id));
 
-    if (std::is_same<T, half>::value) {
-        cublas_wrapper->setGemmConfig(CUDA_R_16F, CUDA_R_16F, CUDA_R_16F, CUDA_R_32F);
-    }
-    else if (std::is_same<T, float>::value) {
-        cublas_wrapper->setFP32GemmConfig();
-    }
+    // if (std::is_same<T, half>::value) {
+    //     cublas_wrapper->setGemmConfig(CUDA_R_16F, CUDA_R_16F, CUDA_R_16F, CUDA_R_32F);
+    // }
+    // else if (std::is_same<T, float>::value) {
+    //     cublas_wrapper->setFP32GemmConfig();
+    // }
 
     ft::NcclParam tensor_para   = nccl_params.first[comms_rank];
     ft::NcclParam pipeline_para = nccl_params.second[comms_rank];
@@ -246,17 +246,17 @@ std::unique_ptr<LlamaTritonSharedModelInstance<T>> LlamaTritonModel<T>::createSh
                                                   shared_weights_[device_id].get(),
                                                   tensor_para,
                                                   stream,
-                                                  cublas_wrapper.get(),
+                                                  nullptr,
                                                   allocator.get(),
                                                   false,  // is_free_buffer_after_forward,
-                                                  cuda_device_prop_ptr.get());
+                                                  nullptr);
 
     return std::make_unique<LlamaTritonSharedModelInstance<T>>(
         LlamaTritonSharedModelInstance<T>{std::move(allocator),
-                                          std::move(cublas_algo_map),
-                                          std::move(cublas_wrapper_mutex),
-                                          std::move(cublas_wrapper),
-                                          std::move(cuda_device_prop_ptr),
+                                        //   std::move(cublas_algo_map),
+                                        //   std::move(cublas_wrapper_mutex),
+                                        //   std::move(cublas_wrapper),
+                                        //   std::move(cuda_device_prop_ptr),
                                           shared_weights_[device_id],
                                           std::move(llama),
                                           session_len_});
@@ -264,13 +264,13 @@ std::unique_ptr<LlamaTritonSharedModelInstance<T>> LlamaTritonModel<T>::createSh
 
 template<typename T>
 std::unique_ptr<AbstractTransformerModelInstance>
-LlamaTritonModel<T>::createModelInstance(int                                                               device_id,
-                                         int                                                               rank,
-                                         cudaStream_t                                                      stream,
+LlamaTritonModel<T>::createModelInstance(int32_t                                                               device_id,
+                                         int32_t                                                               rank,
+                                         dipu::deviceStream_t                                              stream,
                                          std::pair<std::vector<ft::NcclParam>, std::vector<ft::NcclParam>> nccl_params,
                                          std::shared_ptr<ft::AbstractCustomComm> custom_all_reduce_comm)
 {
-    check_cuda_error(cudaSetDevice(device_id));
+    check_cuda_error(dipu::devapis::setDevice(device_id));
     // const int comms_rank = device_id % (tensor_para_size_ * pipeline_para_size_);
 
     std::shared_ptr<LlamaTritonSharedModelInstance<T>> instance;
@@ -293,11 +293,11 @@ LlamaTritonModel<T>::createModelInstance(int                                    
 }
 
 template<typename T>
-void LlamaTritonModel<T>::createSharedWeights(int device_id, int rank)
+void LlamaTritonModel<T>::createSharedWeights(int32_t device_id, int32_t rank)
 {
-    check_cuda_error(cudaSetDevice(device_id));
-    const int tensor_para_rank   = rank % tensor_para_size_;
-    const int pipeline_para_rank = rank / tensor_para_size_;
+    check_cuda_error(dipu::devapis::setDevice(device_id));
+    const int32_t tensor_para_rank   = rank % tensor_para_size_;
+    const int32_t pipeline_para_rank = rank / tensor_para_size_;
     ft::FT_CHECK(pipeline_para_size_ == 1 && pipeline_para_rank == 0);
     shared_weights_[device_id] = std::make_shared<ft::LlamaWeight<T>>(head_num_,
                                                                       kv_head_num_,
@@ -337,8 +337,8 @@ template<typename T>
 void LlamaTritonModel<T>::createCustomComms(
     std::vector<std::shared_ptr<ft::AbstractCustomComm>>* custom_all_reduce_comms, int world_size)
 {
-    using commDataType = typename ft::CustomARCommTypeConverter<T>::Type;
-    ft::initCustomAllReduceComm<commDataType>(custom_all_reduce_comms, enable_custom_all_reduce_, world_size);
+    // using commDataType = typename ft::CustomARCommTypeConverter<T>::Type;
+    // ft::initCustomAllReduceComm<commDataType>(custom_all_reduce_comms, enable_custom_all_reduce_, world_size);
 }
 
 template<typename T>
@@ -348,7 +348,7 @@ LlamaTritonModel<T>::createNcclParams(const int node_id, const int device_id_sta
     const auto device_count     = ft::getDeviceCount();
     bool       need_nccl_params = false;
     // create nccl group when there are non-occupied devices
-    for (int i = 0; i < device_count; ++i) {
+    for (int32_t i = 0; i < device_count; ++i) {
         std::lock_guard<std::mutex> lock(shared_mutexes_[i]);
         if (shared_instances_[i] == nullptr) {
             need_nccl_params = true;
@@ -361,9 +361,9 @@ LlamaTritonModel<T>::createNcclParams(const int node_id, const int device_id_sta
     else {
         TM_LOG_INFO("Skipping NCCL param creation.");
 
-        const int tensor_para_size   = getTensorParaSize();
-        const int pipeline_para_size = getPipelineParaSize();
-        const int local_comm_size    = multi_node ? device_count : tensor_para_size * pipeline_para_size;
+        const int32_t tensor_para_size   = getTensorParaSize();
+        const int32_t pipeline_para_size = getPipelineParaSize();
+        const int32_t local_comm_size    = multi_node ? device_count : tensor_para_size * pipeline_para_size;
 
         std::vector<ft::NcclParam> tensor_para_params(local_comm_size);
         std::vector<ft::NcclParam> pipeline_para_params(local_comm_size);
@@ -378,13 +378,13 @@ std::unique_ptr<ft::AbstractInstanceComm> LlamaTritonModel<T>::createInstanceCom
 }
 
 template<typename T>
-int LlamaTritonModel<T>::getTensorParaSize()
+int32_t LlamaTritonModel<T>::getTensorParaSize()
 {
     return tensor_para_size_;
 }
 
 template<typename T>
-int LlamaTritonModel<T>::getPipelineParaSize()
+int32_t LlamaTritonModel<T>::getPipelineParaSize()
 {
     return pipeline_para_size_;
 }

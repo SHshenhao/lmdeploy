@@ -17,7 +17,7 @@
 #pragma once
 
 #include "src/turbomind/utils/Tensor.h"
-#include "src/turbomind/utils/cuda_fp8_utils.h"
+// #include "src/turbomind/utils/cuda_fp8_utils.h"
 #include "src/turbomind/utils/cuda_utils.h"
 
 namespace turbomind {
@@ -43,11 +43,11 @@ void cudaH2Dcpy(T* tgt, const T* src, const size_t size);
 template<typename T>
 void cudaD2Dcpy(T* tgt, const T* src, const size_t size);
 
-template<typename T>
-void cudaAutoCpy(T* tgt, const T* src, const size_t size, dipu::deviceStream_t stream = NULL);
+// template<typename T>
+// void cudaAutoCpy(T* tgt, const T* src, const size_t size, dipu::deviceStream_t stream = NULL);
 
-template<typename T>
-void cudaRandomUniform(T* buffer, const size_t size);
+// template<typename T>
+// void cudaRandomUniform(T* buffer, const size_t size);
 
 struct ConcateSlice {
     std::vector<std::pair<size_t, size_t>> slices;
@@ -71,42 +71,42 @@ std::vector<float> loadArrayFromBin(std::vector<size_t>       shape,
 //                                               std::string         filename,
 //                                               FtCudaDataType      model_file_type = FtCudaDataType::FP32);
 
-void invokeCudaD2DcpyHalf2Float(float* dst, half* src, const size_t size, dipu::deviceStream_t stream);
-void invokeCudaD2DcpyFloat2Half(half* dst, float* src, const size_t size, dipu::deviceStream_t stream);
-#ifdef ENABLE_FP8
-void invokeCudaD2Dcpyfp82Float(float* dst, __nv_fp8_e4m3* src, const size_t size, cudaStream_t stream);
-void invokeCudaD2Dcpyfp82Half(half* dst, __nv_fp8_e4m3* src, const size_t size, cudaStream_t stream);
-void invokeCudaD2DcpyFloat2fp8(__nv_fp8_e4m3* dst, float* src, const size_t size, cudaStream_t stream);
-void invokeCudaD2DcpyHalf2fp8(__nv_fp8_e4m3* dst, half* src, const size_t size, cudaStream_t stream);
-void invokeCudaD2DcpyBfloat2fp8(__nv_fp8_e4m3* dst, __nv_bfloat16* src, const size_t size, cudaStream_t stream);
-#endif  // ENABLE_FP8
-#ifdef ENABLE_BF16
-void invokeCudaD2DcpyBfloat2Float(float* dst, __nv_bfloat16* src, const size_t size, cudaStream_t stream);
-#endif  // ENABLE_BF16
+// void invokeCudaD2DcpyHalf2Float(float* dst, half* src, const size_t size, dipu::deviceStream_t stream);
+// void invokeCudaD2DcpyFloat2Half(half* dst, float* src, const size_t size, dipu::deviceStream_t stream);
+// #ifdef ENABLE_FP8
+// void invokeCudaD2Dcpyfp82Float(float* dst, __nv_fp8_e4m3* src, const size_t size, cudaStream_t stream);
+// void invokeCudaD2Dcpyfp82Half(half* dst, __nv_fp8_e4m3* src, const size_t size, cudaStream_t stream);
+// void invokeCudaD2DcpyFloat2fp8(__nv_fp8_e4m3* dst, float* src, const size_t size, cudaStream_t stream);
+// void invokeCudaD2DcpyHalf2fp8(__nv_fp8_e4m3* dst, half* src, const size_t size, cudaStream_t stream);
+// void invokeCudaD2DcpyBfloat2fp8(__nv_fp8_e4m3* dst, __nv_bfloat16* src, const size_t size, cudaStream_t stream);
+// #endif  // ENABLE_FP8
+// #ifdef ENABLE_BF16
+// void invokeCudaD2DcpyBfloat2Float(float* dst, __nv_bfloat16* src, const size_t size, cudaStream_t stream);
+// #endif  // ENABLE_BF16
 
-template<typename T_OUT, typename T_IN>
-void invokeCudaCast(T_OUT* dst, T_IN const* const src, const size_t size, dipu::deviceStream_t stream);
+// template<typename T_OUT, typename T_IN>
+// void invokeCudaCast(T_OUT* dst, T_IN const* const src, const size_t size, dipu::deviceStream_t stream);
 
-template<typename T, size_t n_dims>
-__inline__ __host__ __device__ size_t dim2flat(const T (&idx)[n_dims], const T (&dims)[n_dims])
-{
-    size_t flat_idx = 0;
-    for (size_t i = 0; i < n_dims; i++) {
-        flat_idx += idx[i];
-        if (i + 1 < n_dims)
-            flat_idx *= dims[i + 1];
-    }
-    return flat_idx;
-}
+// template<typename T, size_t n_dims>
+// __inline__ __host__ __device__ size_t dim2flat(const T (&idx)[n_dims], const T (&dims)[n_dims])
+// {
+//     size_t flat_idx = 0;
+//     for (size_t i = 0; i < n_dims; i++) {
+//         flat_idx += idx[i];
+//         if (i + 1 < n_dims)
+//             flat_idx *= dims[i + 1];
+//     }
+//     return flat_idx;
+// }
 
-template<typename T1, size_t n_dims, typename T2>
-__inline__ __host__ __device__ void flat2dim(T1 flat_idx, const T2 (&dims)[n_dims], T2 (&idx)[n_dims])
-{
-    for (int i = n_dims - 1; i >= 0; i--) {
-        idx[i] = flat_idx % dims[i];
-        flat_idx /= dims[i];
-    }
-}
+// template<typename T1, size_t n_dims, typename T2>
+// __inline__ __host__ __device__ void flat2dim(T1 flat_idx, const T2 (&dims)[n_dims], T2 (&idx)[n_dims])
+// {
+//     for (int i = n_dims - 1; i >= 0; i--) {
+//         idx[i] = flat_idx % dims[i];
+//         flat_idx /= dims[i];
+//     }
+// }
 
 // template<typename T>
 // void invokeInPlaceTranspose(T* data, T* workspace, const int dim0, const int dim1);
@@ -123,8 +123,8 @@ __inline__ __host__ __device__ void flat2dim(T1 flat_idx, const T2 (&dims)[n_dim
 // template<typename T>
 // void invokeDivideScale(T* tensor, float scale, const size_t size, dipu::deviceStream_t stream);
 
-template<typename T_IN, typename T_OUT>
-void invokeCudaD2DcpyConvert(T_OUT* tgt, const T_IN* src, const size_t size, dipu::deviceStream_t stream = 0);
+// template<typename T_IN, typename T_OUT>
+// void invokeCudaD2DcpyConvert(T_OUT* tgt, const T_IN* src, const size_t size, dipu::deviceStream_t stream = 0);
 
 // template<typename T_IN, typename T_OUT>
 // void invokeCudaD2DScaleCpyConvert(

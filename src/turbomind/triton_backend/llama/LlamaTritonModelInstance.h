@@ -30,13 +30,13 @@ namespace ft = turbomind;
 template<typename T>
 struct LlamaTritonSharedModelInstance {
     std::unique_ptr<ft::Allocator<ft::AllocatorType::CUDA>> allocator;
-    std::unique_ptr<ft::cublasAlgoMap>                      cublas_algo_map;
-    std::unique_ptr<std::mutex>                             cublas_wrapper_mutex;
-    std::unique_ptr<ft::cublasMMWrapper>                    cublas_wrapper;
-    std::unique_ptr<cudaDeviceProp>                         cuda_device_prop_ptr;
+    // std::unique_ptr<ft::cublasAlgoMap>                      cublas_algo_map;
+    // std::unique_ptr<std::mutex>                             cublas_wrapper_mutex;
+    // std::unique_ptr<ft::cublasMMWrapper>                    cublas_wrapper;
+    // std::unique_ptr<cudaDeviceProp>                         cuda_device_prop_ptr;
     std::shared_ptr<ft::LlamaWeight<T>>                     llm_weight;
     std::unique_ptr<ft::LlamaV2<T>>                         llm;
-    const int                                               session_len;
+    const int32_t                                               session_len;
 };
 
 template<typename T>
@@ -57,7 +57,8 @@ struct LlamaTritonModelInstance: AbstractTransformerModelInstance {
             ft::AbstractInstanceComm*) override;
 
     static std::shared_ptr<std::unordered_map<std::string, triton::Tensor>>
-    convert_outputs(const std::unordered_map<std::string, ft::Tensor>& output_tensors);
+    // std::shared_ptr<std::unordered_map<std::string, triton::Tensor>>
+    convert_outputs(const std::unordered_map<std::string, ft::Tensor>& output_tensors, const LlamaTritonModelInstance<T>* model);
 
 private:
     const std::shared_ptr<LlamaTritonSharedModelInstance<T>>      instance_;
@@ -73,22 +74,28 @@ private:
                         const bool   is_return_logits);
     void freeBuffer();
 
-    int*   d_input_ids_                = nullptr;
-    int*   d_input_lengths_            = nullptr;
-    int*   d_input_bad_words_          = nullptr;
-    int*   d_input_stop_words_         = nullptr;
-    int*   d_request_prompt_lengths_   = nullptr;
+    int32_t*   d_input_ids_                = nullptr;
+    int32_t*   d_input_lengths_            = nullptr;
+    int32_t*   d_input_bad_words_          = nullptr;
+    int32_t*   d_input_stop_words_         = nullptr;
+    int32_t*   d_request_prompt_lengths_   = nullptr;
     T*     d_request_prompt_embedding_ = nullptr;
     float* d_top_p_decay_              = nullptr;
     float* d_top_p_min_                = nullptr;
-    int*   d_top_p_reset_ids_          = nullptr;
+    int32_t*   d_top_p_reset_ids_          = nullptr;
 
-    int*   d_output_ids_       = nullptr;
-    int*   d_sequence_lengths_ = nullptr;
+    int32_t*   d_output_ids_       = nullptr;
+    int32_t*   d_sequence_lengths_ = nullptr;
     float* d_output_log_probs_ = nullptr;
     float* d_cum_log_probs_    = nullptr;
     float* d_output_logits_    = nullptr;
 
     uint32_t*          h_total_output_lengths_ = nullptr;
     std::exception_ptr h_exception_            = nullptr;
+    // for out
+    int32_t*   h_output_ids_       = nullptr;
+    int32_t*   h_sequence_lengths_ = nullptr;
+    float* h_output_log_probs_ = nullptr;
+    float* h_cum_log_probs_    = nullptr;
+    float* h_output_logits_    = nullptr;
 };

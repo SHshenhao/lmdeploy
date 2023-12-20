@@ -29,10 +29,12 @@
 #include "src/turbomind/models/llama/LlamaWeight.h"
 #include "src/turbomind/models/llama/Request.h"
 #include "src/turbomind/utils/allocator.h"
-#include "src/turbomind/utils/cublasMMWrapper.h"
+// #include "src/turbomind/utils/cublasMMWrapper.h"
 #include "src/turbomind/utils/instance_comm.h"
 #include "src/turbomind/utils/nccl_utils.h"
 #include <unordered_map>
+
+#include "src/turbomind/runtime/diopirt/diopirt_impl.h"
 
 using ffi_api_lock_ctrl_t = std::function<void(int)>;
 
@@ -61,24 +63,24 @@ public:
             size_t                       vocab_size,
             const LlamaAttentionParams&  attn_params,
             float                        norm_eps,
-            int                          max_batch_size,
-            int                          max_context_token_num,
-            int                          session_len,
-            int                          step_length,
-            int                          start_id,
-            int                          end_id,
-            int                          cache_max_entry_count,
-            int                          cache_chunk_size,
-            int                          quant_policy,
+            int32_t                          max_batch_size,
+            int32_t                          max_context_token_num,
+            int32_t                          session_len,
+            int32_t                          step_length,
+            int32_t                          start_id,
+            int32_t                          end_id,
+            int32_t                          cache_max_entry_count,
+            int32_t                          cache_chunk_size,
+            int32_t                          quant_policy,
             bool                         use_context_fmha,
             std::shared_ptr<SharedState> shared_state,
             LlamaWeight<T>*              weights,
             NcclParam                    tensor_para,
-            cudaStream_t                 stream,
-            cublasMMWrapper*             cublas_wrapper,
+            dipu::deviceStream_t         stream,
+            void*                        cublas_wrapper,
             IAllocator*                  allocator,
             bool                         is_free_buffer_after_forward,
-            cudaDeviceProp*              cuda_device_prop);
+            void*                        cuda_device_prop);
 
     struct Control {
         AbstractInstanceComm* comm;
@@ -104,22 +106,22 @@ public:
 private:
     friend class Batch;
 
-    void internalThreadEntry(int device_id);
+    void internalThreadEntry(int32_t device_id);
 
     void
-    initialize(const LlamaAttentionParams& attn_params, size_t kv_head_num, bool use_context_fmha, int quant_policy);
+    initialize(const LlamaAttentionParams& attn_params, size_t kv_head_num, bool use_context_fmha, int32_t quant_policy);
 
-    void embeddingLookup(T* embeddings, const int* token_ids_buf, int batch_size, int step);
+    void embeddingLookup(T* embeddings, const int32_t* token_ids_buf, int32_t batch_size, int32_t step);
 
     void contextDecode(T*         deocder_output,
                        uintptr_t* k_cache_ptr,
                        uintptr_t* v_cache_ptr,
                        T*         context_decoder_input_buf,
                        T*         context_decoder_output_buf,
-                       const int* input_ids,
-                       const int* input_length,
-                       const int* history_length,
-                       const int* context_length,
+                       const int32_t* input_ids,
+                       const int32_t* input_length,
+                       const int32_t* history_length,
+                       const int32_t* context_length,
                        size_t     token_num,
                        size_t     max_input_len,
                        size_t     max_context_len,
@@ -130,11 +132,11 @@ private:
                         uintptr_t* k_cache_ptr,
                         uintptr_t* v_cache_ptr,
                         T*         decoder_input,
-                        const int* sequence_length,
-                        const int* total_padding_count,
+                        const int32_t* sequence_length,
+                        const int32_t* total_padding_count,
                         bool*      finished,
-                        int        step,
-                        int        ite,
+                        int32_t        step,
+                        int32_t        ite,
                         size_t     session_len,
                         size_t     batch_size);
 
@@ -171,18 +173,19 @@ private:
 
     static constexpr bool neox_rotary_style_ = false;
 
-    const int    start_id_;
-    const int    end_id_;
+    const int32_t    start_id_;
+    const int32_t    end_id_;
     const size_t hidden_units_;
 
     const size_t local_head_num_;
     NcclParam    tensor_para_;
 
-    cudaStream_t     stream_;
-    cublasMMWrapper* cublas_wrapper_;
+    dipu::deviceStream_t      stream_;
+    diopiContext ctx_;
+    void* cublas_wrapper_ = nullptr;
     IAllocator*      allocator_;
     bool             is_free_buffer_after_forward_;
-    cudaDeviceProp*  cuda_device_prop_;
+    void*  cuda_device_prop_;
 
     const bool debug_{false};
 
@@ -193,7 +196,7 @@ private:
     LlamaContextDecoder<T>*    context_decoder_{};
     DynamicDecodeLayer<float>* dynamic_decode_layer_{};
 
-    const int                    step_length_;
+    const int32_t                    step_length_;
     LlamaBatch<T>                batch_;
     std::shared_ptr<SharedState> shared_state_;
 

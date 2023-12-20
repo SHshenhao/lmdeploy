@@ -137,10 +137,10 @@ void LlamaBatch<T>::handleStopRequests(const std::vector<std::shared_ptr<Request
         if (ec == 0) {
             auto& output_ids      = r->outputs[rank_].at("output_ids");
             auto& sequence_length = r->outputs[rank_].at("sequence_length");
-            check_cuda_error(
-                cudaMemsetAsync(output_ids.getPtr<int>(), 0, sizeof(int) * output_ids.shape.at(2), stream_));
-            check_cuda_error(cudaMemsetAsync(sequence_length.getPtr<int>(), 0, sizeof(int), stream_));
-            check_cuda_error(cudaStreamSynchronize(stream_));
+            check_cuda_error(dipu::devapis::memSetAsync(stream_, output_ids.getPtr<int32_t>(), 0, sizeof(int32_t) * output_ids.shape.at(2)));
+            check_cuda_error(dipu::devapis::memSetAsync(stream_, sequence_length.getPtr<int32_t>(), 0, sizeof(int32_t)));
+            // check_cuda_error(cudaStreamSynchronize(stream_));
+            check_cuda_error(dipu::devapis::syncStream(stream_));
         }
 
         // When the signal is set threads from LlamaV2::forward can exit
@@ -168,18 +168,18 @@ void LlamaBatch<T>::allocateBuffer(size_t batch_size, size_t session_len)
     context_decoder_output_buf_ =
         (T*)allocator_->reMalloc(context_decoder_output_buf_, sizeof(T) * max_context_token_num_ * hidden_units, false);
     context_decoder_ids_buf_ =
-        (int*)allocator_->reMalloc(context_decoder_ids_buf_, sizeof(int) * max_context_token_num_, false);
+        (int32_t*)allocator_->reMalloc(context_decoder_ids_buf_, sizeof(int32_t) * max_context_token_num_, false);
 
     decoder_input_buf_  = (T*)allocator_->reMalloc(decoder_input_buf_, sizeof(T) * batchxbeam * hidden_units, false);
     decoder_output_buf_ = (T*)allocator_->reMalloc(decoder_output_buf_, sizeof(T) * batchxbeam * hidden_units, false);
 
-    input_ids_buf_      = (int*)allocator_->reMalloc(input_ids_buf_, sizeof(int) * batchxbeam * session_len, true);
-    input_length_buf_   = (int*)allocator_->reMalloc(input_length_buf_, sizeof(int) * batchxbeam);
-    history_length_buf_ = (int*)allocator_->reMalloc(history_length_buf_, sizeof(int) * batchxbeam);
-    context_length_buf_ = (int*)allocator_->reMalloc(context_length_buf_, sizeof(int) * batchxbeam);
+    input_ids_buf_      = (int32_t*)allocator_->reMalloc(input_ids_buf_, sizeof(int32_t) * batchxbeam * session_len, true);
+    input_length_buf_   = (int32_t*)allocator_->reMalloc(input_length_buf_, sizeof(int32_t) * batchxbeam);
+    history_length_buf_ = (int32_t*)allocator_->reMalloc(history_length_buf_, sizeof(int32_t) * batchxbeam);
+    context_length_buf_ = (int32_t*)allocator_->reMalloc(context_length_buf_, sizeof(int32_t) * batchxbeam);
 
-    total_padding_count_ = (int*)allocator_->reMalloc(total_padding_count_, sizeof(int) * batchxbeam, false);
-    sequence_lengths_    = (int*)allocator_->reMalloc(sequence_lengths_, sizeof(int) * batchxbeam, false);
+    total_padding_count_ = (int32_t*)allocator_->reMalloc(total_padding_count_, sizeof(int32_t) * batchxbeam, false);
+    sequence_lengths_    = (int32_t*)allocator_->reMalloc(sequence_lengths_, sizeof(int32_t) * batchxbeam, false);
 
     k_cache_ptr_buf_ = (uint64_t*)allocator_->reMalloc(k_cache_ptr_buf_, sizeof(uint64_t) * batchxbeam);
     v_cache_ptr_buf_ = (uint64_t*)allocator_->reMalloc(v_cache_ptr_buf_, sizeof(uint64_t) * batchxbeam);
@@ -187,9 +187,9 @@ void LlamaBatch<T>::allocateBuffer(size_t batch_size, size_t session_len)
     logits_buf_       = (float*)allocator_->reMalloc(logits_buf_, sizeof(float) * batchxbeam * vocab_size, false);
     local_logits_buf_ = (float*)allocator_->reMalloc(local_logits_buf_, sizeof(float) * batchxbeam * vocab_size, false);
 
-    token_ids_buf_ = (int*)allocator_->reMalloc(token_ids_buf_, sizeof(int) * batchxbeam * session_len * 2, true);
+    token_ids_buf_ = (int32_t*)allocator_->reMalloc(token_ids_buf_, sizeof(int32_t) * batchxbeam * session_len * 2, true);
 
-    end_ids_buf_   = (int*)allocator_->reMalloc(end_ids_buf_, sizeof(int) * batch_size, false);
+    end_ids_buf_   = (int32_t*)allocator_->reMalloc(end_ids_buf_, sizeof(int32_t) * batch_size, false);
     finished_buf_  = (bool*)allocator_->reMalloc(finished_buf_, sizeof(bool) * batchxbeam, false);
     seq_limit_len_ = (uint32_t*)allocator_->reMalloc(seq_limit_len_, sizeof(uint32_t) * batch_size, false);
 
@@ -199,14 +199,14 @@ void LlamaBatch<T>::allocateBuffer(size_t batch_size, size_t session_len)
 template<typename T>
 void LlamaBatch<T>::allocatePersistantBuffer(size_t max_batch_size)
 {
-    output_ids_buf_ = (int*)allocator_->reMalloc(output_ids_buf_, sizeof(int) * max_batch_size * session_len_, true);
+    output_ids_buf_ = (int32_t*)allocator_->reMalloc(output_ids_buf_, sizeof(int32_t) * max_batch_size * session_len_, true);
 
     stop_words_buf_ =
-        (int*)allocator_->reMalloc(stop_words_buf_, sizeof(int) * max_batch_size * kMaxStopBadWordsLen, true);
+        (int32_t*)allocator_->reMalloc(stop_words_buf_, sizeof(int32_t) * max_batch_size * kMaxStopBadWordsLen, true);
     bad_words_buf_ =
-        (int*)allocator_->reMalloc(bad_words_buf_, sizeof(int) * max_batch_size * kMaxStopBadWordsLen, true);
+        (int32_t*)allocator_->reMalloc(bad_words_buf_, sizeof(int32_t) * max_batch_size * kMaxStopBadWordsLen, true);
 
-    h_runtime_top_k_ = (int*)allocator_->reMalloc(h_runtime_top_k_, sizeof(int) * max_batch_size, true, true);
+    h_runtime_top_k_ = (int32_t*)allocator_->reMalloc(h_runtime_top_k_, sizeof(int32_t) * max_batch_size, true, true);
     h_runtime_top_p_ = (float*)allocator_->reMalloc(h_runtime_top_p_, sizeof(float) * max_batch_size, true, true);
     h_temperature_   = (float*)allocator_->reMalloc(h_temperature_, sizeof(float) * max_batch_size, true, true);
     h_repetition_penalty_ =
@@ -221,8 +221,12 @@ void LlamaBatch<T>::allocatePersistantBuffer(size_t max_batch_size)
                         {"repetition_penalty", h_repetition_penalty_},
                         {"random_seed", h_random_seed_}};
 
-    topk_curandstate_buf_ = allocator_->reMalloc(topk_curandstate_buf_, sizeof(curandState_t) * max_batch_size, true);
-    topp_curandstate_buf_ = allocator_->reMalloc(topp_curandstate_buf_, sizeof(curandState_t) * max_batch_size, true);
+    // topk_curandstate_buf_ = allocator_->reMalloc(topk_curandstate_buf_, sizeof(curandState_t) * max_batch_size, true);
+    // topp_curandstate_buf_ = allocator_->reMalloc(topp_curandstate_buf_, sizeof(curandState_t) * max_batch_size, true);
+    std::vector<dipu::DIPURawGeneratorImpl> temp_topk_curandstate_buf_(max_batch_size);
+    std::vector<dipu::DIPURawGeneratorImpl> temp_topp_curandstate_buf_(max_batch_size);
+    topk_curandstate_buf_.swap(temp_topk_curandstate_buf_);
+    topp_curandstate_buf_.swap(temp_topp_curandstate_buf_);
 
     {
         NcclGuard barrier(llama_->tensor_para_, stream_, true);
@@ -315,6 +319,7 @@ LlamaBatch<T>::LlamaBatch(int max_batch_size, int max_context_token_num, int ses
     rank_(llama->tensor_para_.rank_),
     debug_(llama->debug_),
     llama_(llama),
+    ctx_(llama->stream_),
     data_type_(getTensorType<T>())
 {
     stream_         = llama_->stream_;
@@ -346,16 +351,21 @@ void LlamaBatch<T>::initializeSampling(int infer_request_count)
             FT_CHECK(shape[0] == 1);
             shape[0]                = batch_size_;
             const int size_in_bytes = ref.sizeBytes();
-            check_cuda_error(cudaMemsetAsync(param.second, 0, size_in_bytes * batch_size_, stream_));
+            if (param.first == "stop_words_list" || param.first == "bad_words_list") {
+                check_cuda_error(dipu::devapis::memSetAsync(stream_, param.second, 0, size_in_bytes * batch_size_));
+            } else {
+                memset(param.second, 0, size_in_bytes * batch_size_);
+            }
             for (int i = 0; i < batch_size_; ++i) {
                 if (requests_[i]->inputs[rank_].isExist(param.first)) {
                     auto& src = requests_[i]->inputs[rank_].at(param.first);
                     FT_CHECK(ref.shape == src.shape);
-                    check_cuda_error(cudaMemcpyAsync((uint8_t*)param.second + size_in_bytes * i,
-                                                     src.getPtr<void>(),
-                                                     size_in_bytes,
-                                                     cudaMemcpyDefault,
-                                                     stream_));
+                    if (param.first == "stop_words_list" || param.first == "bad_words_list") {
+                        check_cuda_error(dipu::devapis::memCopyH2DAsync(stream_, size_in_bytes, (uint8_t*)param.second + size_in_bytes * i,
+                                                     src.getPtr<void>()));
+                    } else {
+                        memcpy((uint8_t*)param.second + size_in_bytes * i, src.getPtr<void>(), size_in_bytes);
+                    }
                 }
             }
             inputs.insert({param.first, {ref.where, ref.type, shape, param.second}});
@@ -372,21 +382,21 @@ void LlamaBatch<T>::initializeSampling(int infer_request_count)
     for (int i = 0; i < batch_size_; ++i) {
         // recover random states if not a new request or new request w/o "random_seed"
         if (i < batch_size_ - infer_request_count || !requests_[i]->inputs[rank_].isExist("random_seed")) {
-            check_cuda_error(cudaMemcpyAsync(llama_->dynamic_decode_layer_->topk_curandstate_buf() + i,
-                                             (curandState_t*)topk_curandstate_buf_ + i,
-                                             sizeof(curandState_t),
-                                             cudaMemcpyDefault,
-                                             stream_));
-            check_cuda_error(cudaMemcpyAsync(llama_->dynamic_decode_layer_->topp_curandstate_buf() + i,
-                                             (curandState_t*)topp_curandstate_buf_ + i,
-                                             sizeof(curandState_t),
-                                             cudaMemcpyDefault,
-                                             stream_));
+            llama_->dynamic_decode_layer_->topk_curandstate_buf()[i].set_state(topk_curandstate_buf_[i].get_state());
+            llama_->dynamic_decode_layer_->topp_curandstate_buf()[i].set_state(topp_curandstate_buf_[i].get_state()); // SH check
+            // check_cuda_error(memcpy(llama_->dynamic_decode_layer_->topk_curandstate_buf() + i,
+            //                                  (curandState_t*)topk_curandstate_buf_ + i,
+            //                                  sizeof(dipu::DIPURawGeneratorImpl),
+            //                                  cudaMemcpyDefault,
+            //                                  stream_)); // SH  cudaMemcpyDefault
+            // check_cuda_error(memcpy(sizeof(curandState_t), llama_->dynamic_decode_layer_->topp_curandstate_buf() + i,
+            //                                  (d*)topp_curandstate_buf_ + i)); // SH  cudaMemcpyDefault
         }
     }
 
     handleOptArg(&inputs_, "end_id", end_ids_buf_, llama_->end_id_, batch_size_);
-    cudaStreamSynchronize(0);
+    // cudaStreamSynchronize(0);
+    dipu::devapis::syncDevice();
 }
 
 template<typename T>
@@ -394,8 +404,13 @@ void LlamaBatch<T>::initializeGeneration()
 {
     max_context_len_ = *std::max_element(h_context_length_buf_, h_context_length_buf_ + batch_size_);
 
-    check_cuda_error(cudaMemsetAsync(token_ids_buf_, 0, sizeof(int) * batch_size_ * session_len_ * 2, stream_));
-    invokeTransposeAxis01(token_ids_buf_, output_ids_buf_, batch_size_, session_len_, 1, stream_);
+    check_cuda_error(dipu::devapis::memSetAsync(stream_, token_ids_buf_, 0, sizeof(int) * batch_size_ * session_len_ * 2));
+    // invokeTransposeAxis01(token_ids_buf_, output_ids_buf_, batch_size_, session_len_, 1, stream_);
+    turbomind::Tensor token_ids_buf_tensor{MEMORY_GPU, getTensorType<T>(), {int64_t(session_len_), int64_t(batch_size_)}, token_ids_buf_};
+    turbomind::Tensor output_ids_buf_tensor{MEMORY_GPU, getTensorType<T>(), {int64_t(batch_size_), int64_t(session_len_)}, output_ids_buf_};
+    diopiTensorHandle_t diopi_token_ids_buf = dipu::diopi_helper::toDiopiTensorHandle(token_ids_buf_tensor);
+    diopiTensorHandle_t diopi_output_ids_buf = dipu::diopi_helper::toDiopiTensorHandle(output_ids_buf_tensor);
+    diopiTranspose(&ctx_, diopi_token_ids_buf, diopi_output_ids_buf, 1, 0);
     sync_check_cuda_error();
 
     // token_ids_buf_[s, b]
@@ -409,40 +424,47 @@ void LlamaBatch<T>::initializeGeneration()
         auto p_src     = h_context_length_buf_[i] - 1;
         auto p_dst     = max_context_len_ - 1;
         if (p_src != p_dst) {  // dst and src of `cudaMemcpyAsync` must not overlap
-            check_cuda_error(cudaMemcpyAsync(token_ids + p_dst * batch_size_,
-                                             token_ids + p_src * batch_size_,
-                                             sizeof(int),
-                                             cudaMemcpyDefault,
-                                             stream_));
+            auto device_id = dipu::devapis::current_device();
+            check_cuda_error(dipu::devapis::memCopyD2DAsync(stream_, sizeof(int32_t), device_id, token_ids + p_dst * batch_size_,
+                                            device_id, token_ids + p_src * batch_size_)); // SH cudaMemcpyDefault
         }
     }
 
-    check_cuda_error(cudaMemcpyAsync(
-        context_length_buf_, h_context_length_buf_, sizeof(int) * batch_size_, cudaMemcpyDefault, stream_));
-    check_cuda_error(cudaMemcpyAsync(
-        k_cache_ptr_buf_, h_k_cache_ptr_buf_, sizeof(uintptr_t) * batch_size_, cudaMemcpyDefault, stream_));
-    check_cuda_error(cudaMemcpyAsync(
-        v_cache_ptr_buf_, h_v_cache_ptr_buf_, sizeof(uintptr_t) * batch_size_, cudaMemcpyDefault, stream_));
-
-    check_cuda_error(
-        cudaMemcpyAsync(sequence_lengths_, context_length_buf_, sizeof(int) * batch_size_, cudaMemcpyDefault, stream_));
+    check_cuda_error(dipu::devapis::memCopyH2DAsync(stream_, sizeof(int32_t) * batch_size_, context_length_buf_, h_context_length_buf_));
+        // context_length_buf_, h_context_length_buf_, sizeof(int) * batch_size_, cudaMemcpyDefault, stream_)); // SH cudaMemcpyDefault
+    check_cuda_error(dipu::devapis::memCopyH2DAsync(stream_, sizeof(uintptr_t) * batch_size_, k_cache_ptr_buf_, h_k_cache_ptr_buf_));
+        // k_cache_ptr_buf_, h_k_cache_ptr_buf_, sizeof(uintptr_t) * batch_size_, cudaMemcpyDefault, stream_)); // SH cudaMemcpyDefault
+    check_cuda_error(dipu::devapis::memCopyH2DAsync(stream_, sizeof(uintptr_t) * batch_size_, v_cache_ptr_buf_, h_v_cache_ptr_buf_));
+        // v_cache_ptr_buf_, h_v_cache_ptr_buf_, sizeof(uintptr_t) * batch_size_, cudaMemcpyDefault, stream_)); // SH cudaMemcpyDefault
+    auto device_id = dipu::devapis::current_device();
+    check_cuda_error(dipu::devapis::memCopyD2DAsync(stream_, sizeof(int32_t) * batch_size_, device_id, sequence_lengths_, device_id, context_length_buf_));
+        // cudaMemcpyAsync(sequence_lengths_, context_length_buf_, sizeof(int) * batch_size_, cudaMemcpyDefault, stream_)); // SH cudaMemcpyDefault
     // `sequence_lengths_` will be increased by dynamic decode
     // note that in decoder and in output "sequence length" has different semantic
     // - in decoder it means length of sequence that has kv cache already computed
     // - in output it means length of all tokens (the last generated token does not have k/v cache computed yet)
-    invokePlusScalar(sequence_lengths_, -1, batch_size_, stream_);
+    // invokePlusScalar(sequence_lengths_, -1, batch_size_, stream_);
+    turbomind::Tensor plusscalar_inout{MEMORY_GPU, TYPE_INT32, {batch_size_}, sequence_lengths_};
+    diopiTensorHandle_t diopi_plusscalar_inout_tesnor = dipu::diopi_helper::toDiopiTensorHandle(plusscalar_inout);
+    diopiPlusScalarInp(&ctx_, diopi_plusscalar_inout_tesnor, -1, batch_size_);
     sync_check_cuda_error();
 
     // total_padding_count_
     // decoding starts at max_context_len
-    check_cuda_error(cudaMemsetAsync(total_padding_count_, 0, sizeof(int) * batch_size_, stream_));
-    invokeUpdatePaddingCount(total_padding_count_,  //
-                             context_length_buf_,
-                             max_context_len_,
-                             batch_size_,
-                             1,
-                             stream_);
+    check_cuda_error(dipu::devapis::memSetAsync(stream_, total_padding_count_, 0, sizeof(int32_t) * batch_size_));
+    // invokeUpdatePaddingCount(total_padding_count_,  //
+    //                          context_length_buf_,
+    //                          max_context_len_,
+    //                          batch_size_,
+    //                          1,
+    //                          stream_);
+    turbomind::Tensor updatepaddingcount_input{MEMORY_GPU, TYPE_INT32, {batch_size_}, context_length_buf_};
+    turbomind::Tensor updatepaddingcount_output{MEMORY_GPU, TYPE_INT32, {batch_size_}, total_padding_count_};
+    diopiConstTensorHandle_t dipoi_input_tensor = dipu::diopi_helper::toDiopiTensorHandle(updatepaddingcount_input);
+    diopiTensorHandle_t dipoi_output_tensor = dipu::diopi_helper::toDiopiTensorHandle(updatepaddingcount_output);
+    diopiUpdatePaddingCount(&ctx_, dipoi_output_tensor, dipoi_input_tensor, max_context_len_, batch_size_);
     sync_check_cuda_error();
+    dipu::diopi_helper::clearDiopiContextAll(ctx_);
 
     // seq_limit_len_, will be compared to `step` instead of `sequence_length`, so padding len should be accounted for
     for (int i = 0; i < batch_size_; ++i) {
@@ -450,10 +472,10 @@ void LlamaBatch<T>::initializeGeneration()
         // mask finished sequences
         h_finished_buf_[i] = max_context_len_ >= h_seq_limit_len_[i];
     }
-    check_cuda_error(
-        cudaMemcpyAsync(seq_limit_len_, h_seq_limit_len_, sizeof(uint32_t) * batch_size_, cudaMemcpyDefault, stream_));
-    check_cuda_error(
-        cudaMemcpyAsync(finished_buf_, h_finished_buf_, sizeof(bool) * batch_size_, cudaMemcpyDefault, stream_));
+    check_cuda_error(dipu::devapis::memCopyH2DAsync(stream_, sizeof(uint32_t) * batch_size_, seq_limit_len_, h_seq_limit_len_));
+        // cudaMemcpyAsync(seq_limit_len_, h_seq_limit_len_, sizeof(uint32_t) * batch_size_, cudaMemcpyDefault, stream_));
+    check_cuda_error(dipu::devapis::memCopyH2DAsync(stream_, sizeof(bool) * batch_size_, finished_buf_, h_finished_buf_));
+        // cudaMemcpyAsync(finished_buf_, h_finished_buf_, sizeof(bool) * batch_size_, cudaMemcpyDefault, stream_));
 
     // ! range of step_ [1, 2 * session_len]
     // consider a sequence with context_len == session_len and another sequence with context_len == 1 and
@@ -486,14 +508,15 @@ bool LlamaBatch<T>::generate()
 
     const bool is_first_step = step_ == max_context_len_;
 
-    std::vector<int> prev;
+    std::vector<int32_t> prev;
     if (debug_ && rank_ == 0 && is_first_step) {
         prev.resize(batch_size_);
-        cudaMemcpyAsync(prev.data(),
-                        token_ids_buf_ + (step_ - 1) * batch_size_,
-                        sizeof(int) * batch_size_,
-                        cudaMemcpyDefault,
-                        stream_);
+        // cudaMemcpyAsync(prev.data(),
+        //                 token_ids_buf_ + (step_ - 1) * batch_size_,
+        //                 sizeof(int) * batch_size_,
+        //                 cudaMemcpyDefault,
+        //                 stream_);
+        dipu::devapis::memCopyD2HAsync(stream_, sizeof(int32_t) * batch_size_, prev.data(), token_ids_buf_ + (step_ - 1) * batch_size_);
     }
 
     // embeddingLookup(step_ - 1);
@@ -539,11 +562,14 @@ bool LlamaBatch<T>::generate()
                           batch_size_);
 
     if (debug_ && rank_ == 0) {
-        std::vector<int> curr(batch_size_);
+        std::vector<int32_t> curr(batch_size_);
 
-        cudaMemcpyAsync(
-            curr.data(), token_ids_buf_ + step_ * batch_size_, sizeof(int) * batch_size_, cudaMemcpyDefault, stream_);
-        cudaStreamSynchronize(stream_);
+        // cudaMemcpyAsync(
+        //     curr.data(), token_ids_buf_ + step_ * batch_size_, sizeof(int) * batch_size_, cudaMemcpyDefault, stream_);
+        // cudaStreamSynchronize(stream_);
+        auto device_id = dipu::devapis::current_device();
+        dipu::devapis::memCopyD2HAsync(stream_, sizeof(int32_t) * batch_size_, curr.data(), token_ids_buf_ + step_ * batch_size_);
+        dipu::devapis::syncStream(stream_);
 
         if (is_first_step) {
             std::stringstream sprev;
@@ -577,7 +603,7 @@ void LlamaBatch<T>::initialize(const std::vector<std::shared_ptr<Request>>& infe
     allocateBuffer(batch_size_ + infer_request_count, session_len_);
 
     // handle infer requests
-    std::vector<int>       tmp_input_length(infer_request_count);
+    std::vector<int32_t>       tmp_input_length(infer_request_count);
     std::vector<CachedSeq> tmp_cached_seq;
     tmp_cached_seq.reserve(infer_request_count);
 
@@ -652,37 +678,44 @@ void LlamaBatch<T>::initialize(const std::vector<std::shared_ptr<Request>>& infe
         auto output_ids_ptr = output_ids_buf_ + i * session_len_;
 
         // clear the persistent buffer to prevent leaking previous conversation
-        check_cuda_error(cudaMemsetAsync(output_ids_ptr, 0, sizeof(int) * session_len_, stream_));
+        // check_cuda_error(cudaMemsetAsync(output_ids_ptr, 0, sizeof(int) * session_len_, stream_));
+        check_cuda_error(dipu::devapis::memSetAsync(stream_, output_ids_ptr, 0, sizeof(int32_t) * session_len_));
 
         if (!seq.token_ids.empty()) {
-            check_cuda_error(cudaMemcpyAsync(output_ids_ptr,  //
-                                             seq.token_ids.data(),
-                                             sizeof(int) * seq.token_ids.size(),
-                                             cudaMemcpyDefault,
-                                             stream_));
+            // check_cuda_error(cudaMemcpyAsync(output_ids_ptr,  //
+            //                                  seq.token_ids.data(),
+            //                                  sizeof(int) * seq.token_ids.size(),
+            //                                  cudaMemcpyDefault,
+            //                                  stream_));
+            check_cuda_error(dipu::devapis::memCopyH2DAsync(stream_, sizeof(int32_t) * seq.token_ids.size(), output_ids_ptr, seq.token_ids.data()));
             output_ids_ptr += seq.token_ids.size();
         }
 
         if (h_input_length_buf_[i]) {
-            auto input_ids_ptr = requests_[i]->inputs[rank_].getPtr<int>("input_ids");
-            check_cuda_error(cudaMemcpyAsync(output_ids_ptr,  //
-                                             input_ids_ptr,
-                                             sizeof(int) * h_input_length_buf_[i],
-                                             cudaMemcpyDefault,
-                                             stream_));
+            auto input_ids_ptr = requests_[i]->inputs[rank_].getPtr<int32_t>("input_ids");
+            // check_cuda_error(cudaMemcpyAsync(output_ids_ptr,  //
+            //                                  input_ids_ptr,
+            //                                  sizeof(int) * h_input_length_buf_[i],
+            //                                  cudaMemcpyDefault,
+            //                                  stream_));
+            check_cuda_error(dipu::devapis::memCopyH2DAsync(stream_, sizeof(int32_t) * h_input_length_buf_[i], output_ids_ptr, input_ids_ptr));
         }
 
         if (!requests_[i]->start_flag && !seq.random_state_.empty()) {
-            check_cuda_error(cudaMemcpyAsync((curandState_t*)topk_curandstate_buf_ + i,
-                                             seq.random_state_.data(),
-                                             sizeof(curandState_t),
-                                             cudaMemcpyDefault,
-                                             stream_));
-            check_cuda_error(cudaMemcpyAsync((curandState_t*)topp_curandstate_buf_ + i,
-                                             seq.random_state_.data() + sizeof(curandState_t),
-                                             sizeof(curandState_t),
-                                             cudaMemcpyDefault,
-                                             stream_));
+            // check_cuda_error(cudaMemcpyAsync((curandState_t*)topk_curandstate_buf_ + i,
+            //                                  seq.random_state_.data(),
+            //                                  sizeof(curandState_t),
+            //                                  cudaMemcpyDefault,
+            //                                  stream_));
+            // check_cuda_error(cudaMemcpyAsync((curandState_t*)topp_curandstate_buf_ + i,
+            //                                  seq.random_state_.data() + sizeof(curandState_t),
+            //                                  sizeof(curandState_t),
+            //                                  cudaMemcpyDefault,
+            //                                  stream_)); // SH check
+            auto& topk_stat = const_cast<dipu::DIPURawGeneratorImpl&>(seq.random_state_[0]);
+            auto& topp_stat = const_cast<dipu::DIPURawGeneratorImpl&>(seq.random_state_[1]);
+            topk_curandstate_buf_[i].set_state(topk_stat.get_state());
+            topk_curandstate_buf_[i].set_state(topp_stat.get_state());
         }
     }
 
@@ -692,24 +725,26 @@ void LlamaBatch<T>::initialize(const std::vector<std::shared_ptr<Request>>& infe
         auto        input_ids_buf = input_ids_buf_ + i * session_len_;
         FT_CHECK(missed >= 0);
         if (missed > 0) {
-            check_cuda_error(cudaMemcpyAsync(input_ids_buf,  //
-                                             seq.token_ids.data() + seq.cache_len,
-                                             sizeof(int) * missed,
-                                             cudaMemcpyDefault,
-                                             stream_));
+            // check_cuda_error(cudaMemcpyAsync(input_ids_buf,  //
+            //                                  seq.token_ids.data() + seq.cache_len,
+            //                                  sizeof(int) * missed,
+            //                                  cudaMemcpyDefault,
+            //                                  stream_));
+            check_cuda_error(dipu::devapis::memCopyH2DAsync(stream_, sizeof(int32_t) * missed, input_ids_buf, seq.token_ids.data() + seq.cache_len));                        
             input_ids_buf += missed;
         }
         auto& input_ids = requests_[i]->inputs[rank_].at("input_ids");
-        check_cuda_error(cudaMemcpyAsync(input_ids_buf,  //
-                                         input_ids.getPtr<int>(),
-                                         sizeof(int) * h_input_length_buf_[i],
-                                         cudaMemcpyDefault,
-                                         stream_));
+        // check_cuda_error(cudaMemcpyAsync(input_ids_buf,  //
+        //                                  input_ids.getPtr<int>(),
+        //                                  sizeof(int) * h_input_length_buf_[i],
+        //                                  cudaMemcpyDefault,
+        //                                  stream_));
+        check_cuda_error(dipu::devapis::memCopyH2DAsync(stream_, sizeof(int32_t) * h_input_length_buf_[i], input_ids_buf, input_ids.getPtr<int32_t>())); // SH check device
         h_input_length_buf_[i] += missed;
         h_history_length_buf_[i] = seq.cache_len;
         h_context_length_buf_[i] = h_input_length_buf_[i] + h_history_length_buf_[i];
 
-        const int request_output_len = requests_[i]->inputs[rank_].getVal<int>("request_output_len");
+        const int request_output_len = requests_[i]->inputs[rank_].getVal<int32_t>("request_output_len");
         request_seq_len_limit_[i]    = h_context_length_buf_[i] + request_output_len;
         // `length_criterion` sets finish flag when step >= seq_limit_len, however when step == seq_limit_len
         // the actual sequence length is seq_limit_len + 1, hence seq_limit_len must truncated to session_len - 1
@@ -722,7 +757,7 @@ void LlamaBatch<T>::initialize(const std::vector<std::shared_ptr<Request>>& infe
                     (long)seq.id,
                     h_context_length_buf_[i],
                     request_output_len,
-                    (int)session_len_,
+                    (int32_t)session_len_,
                     trunc_output_len);
             }
         }
@@ -737,35 +772,40 @@ void LlamaBatch<T>::initialize(const std::vector<std::shared_ptr<Request>>& infe
     max_context_len_ = max_context_len;
     step_            = max_context_len;
 
-    check_cuda_error(
-        cudaMemcpyAsync(input_length_buf_, h_input_length_buf_, sizeof(int) * batch_size_, cudaMemcpyDefault, stream_));
-    check_cuda_error(cudaMemcpyAsync(
-        history_length_buf_, h_history_length_buf_, sizeof(int) * batch_size_, cudaMemcpyDefault, stream_));
-    check_cuda_error(cudaMemcpyAsync(
-        context_length_buf_, h_context_length_buf_, sizeof(int) * batch_size_, cudaMemcpyDefault, stream_));
-    check_cuda_error(cudaMemcpyAsync(
-        k_cache_ptr_buf_, h_k_cache_ptr_buf_, sizeof(uintptr_t) * batch_size_, cudaMemcpyDefault, stream_));
-    check_cuda_error(cudaMemcpyAsync(
-        v_cache_ptr_buf_, h_v_cache_ptr_buf_, sizeof(uintptr_t) * batch_size_, cudaMemcpyDefault, stream_));
+    // check_cuda_error(
+    //     cudaMemcpyAsync(input_length_buf_, h_input_length_buf_, sizeof(int) * batch_size_, cudaMemcpyDefault, stream_));
+    // check_cuda_error(cudaMemcpyAsync(
+    //     history_length_buf_, h_history_length_buf_, sizeof(int) * batch_size_, cudaMemcpyDefault, stream_));
+    // check_cuda_error(cudaMemcpyAsync(
+    //     context_length_buf_, h_context_length_buf_, sizeof(int) * batch_size_, cudaMemcpyDefault, stream_));
+    // check_cuda_error(cudaMemcpyAsync(
+    //     k_cache_ptr_buf_, h_k_cache_ptr_buf_, sizeof(uintptr_t) * batch_size_, cudaMemcpyDefault, stream_));
+    // check_cuda_error(cudaMemcpyAsync(
+    //     v_cache_ptr_buf_, h_v_cache_ptr_buf_, sizeof(uintptr_t) * batch_size_, cudaMemcpyDefault, stream_));
+    check_cuda_error(dipu::devapis::memCopyH2DAsync(stream_, sizeof(int32_t) * batch_size_, input_length_buf_, h_input_length_buf_));
+    check_cuda_error(dipu::devapis::memCopyH2DAsync(stream_, sizeof(int32_t) * batch_size_, history_length_buf_, h_history_length_buf_));
+    check_cuda_error(dipu::devapis::memCopyH2DAsync(stream_, sizeof(int32_t) * batch_size_, context_length_buf_, h_context_length_buf_));
+    check_cuda_error(dipu::devapis::memCopyH2DAsync(stream_, sizeof(uintptr_t) * batch_size_, k_cache_ptr_buf_, h_k_cache_ptr_buf_));
+    check_cuda_error(dipu::devapis::memCopyH2DAsync(stream_, sizeof(uintptr_t) * batch_size_, v_cache_ptr_buf_, h_v_cache_ptr_buf_));
 
     if (llama_->tensor_para_.rank_ == 0) {
-        TM_LOG_INFO("[init] infer_request_count = %d", (int)infer_request_count);
-        TM_LOG_INFO("[init] batch_size = %d", (int)batch_size_);
-        TM_LOG_INFO("[init] session_len = %d", (int)session_len_);
-        TM_LOG_INFO("[init] max_input_length = %d", (int)max_input_length);
-        TM_LOG_INFO("[init] max_context_len = %d", (int)max_context_len);
+        TM_LOG_INFO("[init] infer_request_count = %d", (int32_t)infer_request_count);
+        TM_LOG_INFO("[init] batch_size = %d", (int32_t)batch_size_);
+        TM_LOG_INFO("[init] session_len = %d", (int32_t)session_len_);
+        TM_LOG_INFO("[init] max_input_length = %d", (int32_t)max_input_length);
+        TM_LOG_INFO("[init] max_context_len = %d", (int32_t)max_context_len);
         TM_LOG_INFO(
             "[init] slot  sequence_id  history_len  input_len  context_len  tmp_input_len  token_ids.size  cache_len");
         for (int i = batch_size_ - infer_request_count; i < batch_size_; ++i) {
             TM_LOG_INFO("[init] %4d  %11ld  %11d  %9d  %11d  %13d  %14d  %9d",
                         i,
-                        (int)cached_seq_[i].id,
+                        (int32_t)cached_seq_[i].id,
                         h_history_length_buf_[i],
                         h_input_length_buf_[i],
                         h_context_length_buf_[i],
                         tmp_input_len[i],
-                        (int)cached_seq_[i].token_ids.size(),
-                        (int)cached_seq_[i].cache_len);
+                        (int32_t)cached_seq_[i].token_ids.size(),
+                        (int32_t)cached_seq_[i].cache_len);
         }
     }
 }
@@ -781,21 +821,29 @@ void LlamaBatch<T>::contextDecode()
         }
     }
     if (base >= 0) {
-        check_cuda_error(cudaStreamSynchronize(stream_));
+        check_cuda_error(dipu::devapis::syncStream(stream_));
         const auto tick = std::chrono::high_resolution_clock::now();
 
         const int context_decode_count = batch_size_ - base;
         if (rank_ == 0) {
             TM_LOG_INFO("[decodeContext] base = %d, count = %d", base, context_decode_count);
         }
-        invokePlusScalar(input_length_buf_ + base, -1, context_decode_count, stream_);
-        invokePlusScalar(context_length_buf_ + base, -1, context_decode_count, stream_);
 
-        auto get_input_len   = [this](int index) { return h_input_length_buf_[index] - 1; };
-        auto get_context_len = [this](int index) { return h_context_length_buf_[index] - 1; };
+        
+        // invokePlusScalar(input_length_buf_ + base, -1, context_decode_count, stream_);
+        // invokePlusScalar(context_length_buf_ + base, -1, context_decode_count, stream_);
+        turbomind::Tensor input_length_buf_inout{MEMORY_GPU, TYPE_INT32, {context_decode_count}, input_length_buf_ + base};
+        diopiTensorHandle_t diopi_input_length_buf_inout_tesnor = dipu::diopi_helper::toDiopiTensorHandle(input_length_buf_inout);
+        diopiPlusScalarInp(&ctx_, diopi_input_length_buf_inout_tesnor, -1, context_decode_count);
+        turbomind::Tensor context_length_buf_inout{MEMORY_GPU, TYPE_INT32, {context_decode_count}, context_length_buf_ + base};
+        diopiTensorHandle_t diopi_context_length_buf_inout_tesnor = dipu::diopi_helper::toDiopiTensorHandle(context_length_buf_inout);
+        diopiPlusScalarInp(&ctx_, diopi_context_length_buf_inout_tesnor, -1, context_decode_count);
 
-        std::vector<int> decode_indices{base};
-        std::vector<int> decode_lengths{get_input_len(base)};
+        auto get_input_len   = [this](int32_t index) { return h_input_length_buf_[index] - 1; };
+        auto get_context_len = [this](int32_t index) { return h_context_length_buf_[index] - 1; };
+
+        std::vector<int32_t> decode_indices{base};
+        std::vector<int32_t> decode_lengths{get_input_len(base)};
 
         auto token_num       = get_input_len(base);
         auto max_input_len   = get_input_len(base);
@@ -819,11 +867,13 @@ void LlamaBatch<T>::contextDecode()
                 // cccccccc
                 auto context_decoder_ids = context_decoder_ids_buf_;
                 for (int j = offset; j < i; ++j) {
-                    check_cuda_error(cudaMemcpyAsync(context_decoder_ids,
-                                                     input_ids_buf_ + j * session_len_,
-                                                     sizeof(int) * get_input_len(j),
-                                                     cudaMemcpyDefault,
-                                                     stream_));
+                    // check_cuda_error(cudaMemcpyAsync(context_decoder_ids,
+                    //                                  input_ids_buf_ + j * session_len_,
+                    //                                  sizeof(int) * get_input_len(j),
+                    //                                  cudaMemcpyDefault,
+                    //                                  stream_));
+                    auto device_id = dipu::devapis::current_device();
+                    check_cuda_error(dipu::devapis::memCopyD2DAsync(stream_, sizeof(int32_t) * get_input_len(j), device_id, context_decoder_ids, device_id, input_ids_buf_ + j * session_len_));
                     context_decoder_ids += get_input_len(j);
                 }
                 llama_->contextDecode(nullptr,
@@ -866,14 +916,17 @@ void LlamaBatch<T>::contextDecode()
             }
         }
 
-        invokePlusScalar(context_length_buf_ + base, 1, context_decode_count, stream_);
-        invokePlusScalar(input_length_buf_ + base, 1, context_decode_count, stream_);
+        // invokePlusScalar(context_length_buf_ + base, 1, context_decode_count, stream_);
+        // invokePlusScalar(input_length_buf_ + base, 1, context_decode_count, stream_);
+        diopiPlusScalarInp(&ctx_, diopi_context_length_buf_inout_tesnor, 1, context_decode_count);
+        diopiPlusScalarInp(&ctx_, diopi_input_length_buf_inout_tesnor, 1, context_decode_count);
 
         for (int i = offset; i < batch_size_; ++i) {
             h_input_length_buf_[i] = 0;
         }
 
-        check_cuda_error(cudaStreamSynchronize(stream_));
+        check_cuda_error(dipu::devapis::syncStream(stream_));
+        dipu::diopi_helper::clearDiopiContextAll(ctx_);
         const auto tock = std::chrono::high_resolution_clock::now();
         if (rank_ == 0) {
             TM_LOG_INFO("[decodeContext] %.2f ms", std::chrono::duration<float, std::milli>(tock - tick).count());
@@ -930,6 +983,7 @@ void LlamaBatch<T>::outputContextLogits(T*                      context_decoder_
                                              sizeof(float) * llama_->vocab_size_ * lengths[k],
                                              cudaMemcpyDefault,
                                              stream_));
+            check_cuda_error(dipu::devapis::memCopyD2HAsync(stream_, sizeof(float) * llama_->vocab_size_ * lengths[k], output_logits[k], logits));
         }
         logits += llama_->vocab_size_padded_ * lengths[k];
     }
@@ -939,14 +993,16 @@ template<typename T>
 void LlamaBatch<T>::finish()
 {
     // secure info needed by `synchronize()`
-    check_cuda_error(
-        cudaMemcpyAsync(h_finished_buf_, finished_buf_, sizeof(bool) * batch_size_, cudaMemcpyDefault, stream_));
-    check_cuda_error(
-        cudaMemcpyAsync(h_sequence_lengths_, sequence_lengths_, sizeof(int) * batch_size_, cudaMemcpyDefault, stream_));
+    // check_cuda_error(
+    //     cudaMemcpyAsync(h_finished_buf_, finished_buf_, sizeof(bool) * batch_size_, cudaMemcpyDefault, stream_));
+    // check_cuda_error(
+    //     cudaMemcpyAsync(h_sequence_lengths_, sequence_lengths_, sizeof(int) * batch_size_, cudaMemcpyDefault, stream_));
+    check_cuda_error(dipu::devapis::memCopyD2HAsync(stream_, sizeof(bool) * batch_size_, h_finished_buf_, finished_buf_));
+    check_cuda_error(dipu::devapis::memCopyD2HAsync(stream_, sizeof(int32_t) * batch_size_, h_sequence_lengths_, sequence_lengths_));
 
     setOutputTensors(step_);
 
-    check_cuda_error(cudaStreamSynchronize(stream_));
+    check_cuda_error(dipu::devapis::syncStream(stream_));
 
     if (rank_ == 0 && llama_->ffi_lock_) {
         llama_->ffi_lock_(1);
@@ -990,16 +1046,18 @@ void LlamaBatch<T>::synchronize()
             h_context_length_buf_[idx] = h_sequence_lengths_[i] + 1;
             h_sequence_lengths_[idx]   = h_context_length_buf_[idx];
 
-            check_cuda_error(cudaMemcpyAsync((curandState_t*)topk_curandstate_buf_ + idx,
-                                             llama_->dynamic_decode_layer_->topk_curandstate_buf() + i,
-                                             sizeof(curandState_t),
-                                             cudaMemcpyDefault,
-                                             stream_));
-            check_cuda_error(cudaMemcpyAsync((curandState_t*)topp_curandstate_buf_ + idx,
-                                             llama_->dynamic_decode_layer_->topp_curandstate_buf() + i,
-                                             sizeof(curandState_t),
-                                             cudaMemcpyDefault,
-                                             stream_));
+            // check_cuda_error(cudaMemcpyAsync((curandState_t*)topk_curandstate_buf_ + idx,
+            //                                  llama_->dynamic_decode_layer_->topk_curandstate_buf() + i,
+            //                                  sizeof(curandState_t),
+            //                                  cudaMemcpyDefault,
+            //                                  stream_));
+            // check_cuda_error(cudaMemcpyAsync((curandState_t*)topp_curandstate_buf_ + idx,
+            //                                  llama_->dynamic_decode_layer_->topp_curandstate_buf() + i,
+            //                                  sizeof(curandState_t),
+            //                                  cudaMemcpyDefault,
+            //                                  stream_));
+            topk_curandstate_buf_[idx].set_state(llama_->dynamic_decode_layer_->topk_curandstate_buf()[i].get_state());
+            topp_curandstate_buf_[idx].set_state(llama_->dynamic_decode_layer_->topp_curandstate_buf()[i].get_state());
 
             if (i != idx) {
                 h_finished_buf_[idx]        = h_finished_buf_[i];
@@ -1010,11 +1068,13 @@ void LlamaBatch<T>::synchronize()
 
                 requests_[idx]   = std::move(requests_[i]);
                 cached_seq_[idx] = std::move(cached_seq_[i]);
-                check_cuda_error(cudaMemcpyAsync(output_ids_buf_ + idx * session_len_,
-                                                 output_ids_buf_ + i * session_len_,
-                                                 sizeof(int) * h_context_length_buf_[idx],
-                                                 cudaMemcpyDefault,
-                                                 stream_));
+                // check_cuda_error(cudaMemcpyAsync(output_ids_buf_ + idx * session_len_,
+                //                                  output_ids_buf_ + i * session_len_,
+                //                                  sizeof(int) * h_context_length_buf_[idx],
+                //                                  cudaMemcpyDefault,
+                //                                  stream_));
+                auto device_id = dipu::devapis::current_device();
+                check_cuda_error(dipu::devapis::memCopyD2DAsync(stream_, sizeof(int32_t) * h_context_length_buf_[idx], device_id, output_ids_buf_ + idx * session_len_, device_id, output_ids_buf_ + i * session_len_));
             }
             ++idx;
         }
@@ -1032,14 +1092,21 @@ template<typename T>
 void LlamaBatch<T>::setOutputTensors(int max_gen_step)
 {
     // [s,b] -> [b,s] and skip padding in [context_len, max_context_len)
-    invokeGatherOutput(output_ids_buf_,
-                       token_ids_buf_,
-                       context_length_buf_,
-                       max_context_len_,
-                       max_gen_step,
-                       session_len_,
-                       batch_size_,
-                       stream_);
+    // invokeGatherOutput(output_ids_buf_,
+    //                    token_ids_buf_,
+    //                    context_length_buf_,
+    //                    max_context_len_,
+    //                    max_gen_step,
+    //                    session_len_,
+    //                    batch_size_,
+    //                    stream_);
+    turbomind::Tensor output_ids{MEMORY_GPU, TYPE_INT32, {batch_size_, session_len_}, output_ids_buf_};
+    turbomind::Tensor ids{MEMORY_GPU, TYPE_INT32, {session_len_, batch_size_}, token_ids_buf_};
+    turbomind::Tensor context_length{MEMORY_GPU, TYPE_INT32, {batch_size_}, context_length_buf_};
+    diopiTensorHandle_t  dipoi_output_ids = dipu::diopi_helper::toDiopiTensorHandle(output_ids);
+    diopiConstTensorHandle_t dipoi_ids = dipu::diopi_helper::toDiopiTensorHandle(ids);
+    diopiConstTensorHandle_t dipoi_context_length = dipu::diopi_helper::toDiopiTensorHandle(context_length);
+    diopiGatherOutput(&ctx_, dipoi_output_ids, dipoi_ids, dipoi_context_length, max_context_len_, max_gen_step, session_len_, batch_size_);
     sync_check_cuda_error();
 
     /// TODO: fuse the loop into a single kernel
@@ -1047,15 +1114,20 @@ void LlamaBatch<T>::setOutputTensors(int max_gen_step)
         if (requests_[i]) {
             auto& output_ids      = requests_[i]->outputs[rank_].at("output_ids");
             auto& sequence_length = requests_[i]->outputs[rank_].at("sequence_length");
-            check_cuda_error(cudaMemcpyAsync(output_ids.getPtr<int>(),
-                                             output_ids_buf_ + i * session_len_,
-                                             sizeof(int) * output_ids.shape.at(2),
-                                             cudaMemcpyDefault,
-                                             stream_));
-            check_cuda_error(cudaMemcpyAsync(
-                sequence_length.getPtr<int>(), sequence_lengths_ + i, sizeof(int), cudaMemcpyDefault, stream_));
+            // check_cuda_error(cudaMemcpyAsync(output_ids.getPtr<int>(),
+            //                                  output_ids_buf_ + i * session_len_,
+            //                                  sizeof(int) * output_ids.shape.at(2),
+            //                                  cudaMemcpyDefault,
+            //                                  stream_));
+            // check_cuda_error(cudaMemcpyAsync(
+            //     sequence_length.getPtr<int>(), sequence_lengths_ + i, sizeof(int), cudaMemcpyDefault, stream_));
+            check_cuda_error(dipu::devapis::memCopyD2HAsync(stream_, sizeof(int32_t) * output_ids.shape.at(2), output_ids.getPtr<int32_t>(), output_ids_buf_ + i * session_len_));
+            check_cuda_error(dipu::devapis::memCopyD2HAsync(stream_, sizeof(int32_t), sequence_length.getPtr<int>(), sequence_lengths_ + i));
             if (max_gen_step > max_context_len_) {  // +1 for newly generated token
-                invokePlusScalar(sequence_length.getPtr<int>(), 1, 1, stream_);
+                // invokePlusScalar(sequence_length.getPtr<int>(), 1, 1, stream_); // SH check
+                turbomind::Tensor plusscalar_inout{MEMORY_GPU, TYPE_INT32, {1}, sequence_length.getPtr<int32_t>()};
+                diopiTensorHandle_t diopi_plusscalar_inout_tesnor = dipu::diopi_helper::toDiopiTensorHandle(plusscalar_inout);
+                diopiPlusScalarInp(&ctx_, diopi_plusscalar_inout_tesnor, 1, 1);
             }
         }
     }
@@ -1069,13 +1141,14 @@ void LlamaBatch<T>::finishRequest(int index, bool force_end)
     }
 
     if (debug_ && rank_ == 0) {
-        std::vector<int> tokens(h_sequence_lengths_[index] + 1);
-        cudaMemcpyAsync(tokens.data(),
-                        output_ids_buf_ + index * session_len_,
-                        sizeof(int) * tokens.size(),
-                        cudaMemcpyDefault,
-                        stream_);
-        cudaStreamSynchronize(stream_);
+        std::vector<int32_t> tokens(h_sequence_lengths_[index] + 1);
+        // cudaMemcpyAsync(tokens.data(),
+        //                 output_ids_buf_ + index * session_len_,
+        //                 sizeof(int) * tokens.size(),
+        //                 cudaMemcpyDefault,
+        //                 stream_);
+        dipu::devapis::memCopyD2HAsync(stream_, sizeof(int32_t) * tokens.size(), tokens.data(), output_ids_buf_ + index * session_len_);
+        dipu::devapis::syncStream(stream_);
         std::stringstream ss;
         for (const auto& t : tokens) {
             ss << " " << t;
@@ -1084,7 +1157,7 @@ void LlamaBatch<T>::finishRequest(int index, bool force_end)
     }
 
     auto&      output_ids_tensor = requests_[index]->outputs[rank_].at("output_ids");
-    const auto output_ids_data   = output_ids_tensor.getPtr<int>();
+    const auto output_ids_data   = output_ids_tensor.getPtr<int32_t>();
     if (requests_[index]->end_flag || force_end) {
         llama_->kv_cache_mgr_->erase(requests_[index]->id);
     }
@@ -1100,23 +1173,26 @@ void LlamaBatch<T>::finishRequest(int index, bool force_end)
 
         // update token IDs
         seq.token_ids.resize(output_len);
-        check_cuda_error(cudaMemcpyAsync(
-            seq.token_ids.data(), output_ids_data, sizeof(int) * output_len, cudaMemcpyDefault, stream_));
+        // check_cuda_error(cudaMemcpyAsync(
+        //     seq.token_ids.data(), output_ids_data, sizeof(int) * output_len, cudaMemcpyDefault, stream_));
+        check_cuda_error(dipu::devapis::memCopyD2HAsync(stream_, sizeof(int32_t) * output_len, seq.token_ids.data(), output_ids_data));
 
         // update random states
-        seq.random_state_.resize(sizeof(curandState_t) * 2);
-        check_cuda_error(cudaMemcpyAsync(seq.random_state_.data(),
-                                         llama_->dynamic_decode_layer_->topk_curandstate_buf() + index,
-                                         sizeof(curandState_t),
-                                         cudaMemcpyDefault,
-                                         stream_));
-        check_cuda_error(cudaMemcpyAsync(seq.random_state_.data() + sizeof(curandState_t),
-                                         llama_->dynamic_decode_layer_->topp_curandstate_buf() + index,
-                                         sizeof(curandState_t),
-                                         cudaMemcpyDefault,
-                                         stream_));
+        seq.random_state_.resize(2);
+        // check_cuda_error(cudaMemcpyAsync(seq.random_state_.data(),
+        //                                  llama_->dynamic_decode_layer_->topk_curandstate_buf() + index,
+        //                                  sizeof(curandState_t),
+        //                                  cudaMemcpyDefault,
+        //                                  stream_));
+        // check_cuda_error(cudaMemcpyAsync(seq.random_state_.data() + sizeof(curandState_t),
+        //                                  llama_->dynamic_decode_layer_->topp_curandstate_buf() + index,
+        //                                  sizeof(curandState_t),
+        //                                  cudaMemcpyDefault,
+        //                                  stream_));
+        seq.random_state_[0].set_state(llama_->dynamic_decode_layer_->topk_curandstate_buf()[index].get_state());
+        seq.random_state_[1].set_state(llama_->dynamic_decode_layer_->topp_curandstate_buf()[index].get_state());
 
-        check_cuda_error(cudaStreamSynchronize(stream_));
+        check_cuda_error(dipu::devapis::syncStream(stream_));
 
         llama_->kv_cache_mgr_->update(cached_seq_[index], stream_);
     }

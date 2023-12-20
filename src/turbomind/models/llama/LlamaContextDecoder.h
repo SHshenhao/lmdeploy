@@ -21,13 +21,13 @@
 #pragma once
 
 #include "src/turbomind/layers/BaseLayer.h"
-#include "src/turbomind/models/llama/LlamaContextAttentionLayer.h"
+// #include "src/turbomind/models/llama/LlamaContextAttentionLayer.h"
 #include "src/turbomind/models/llama/LlamaDecoderLayerWeight.h"
-#include "src/turbomind/models/llama/LlamaFfnLayer.h"
+// #include "src/turbomind/models/llama/LlamaFfnLayer.h"
 #include "src/turbomind/models/llama/llama_params.h"
 #include "src/turbomind/utils/Tensor.h"
 #include "src/turbomind/utils/allocator.h"
-#include "src/turbomind/utils/cublasMMWrapper.h"
+// #include "src/turbomind/utils/cublasMMWrapper.h"
 #include "src/turbomind/utils/custom_ar_comm.h"
 #include "src/turbomind/utils/nccl_utils.h"
 
@@ -52,13 +52,20 @@ protected:
     NcclParam tensor_para_;
 
     T*   attention_mask_{};
-    int* padding_offset_{};
-    int* cu_seqlens_{};  // cu for cumulative
+    void* workspace_{};
+    // int32_t* padding_offset_{};
+    // int32_t* cu_seqlens_{};  // cu for cumulative
 
     size_t* h_pinned_token_num_ptr_{};
 
-    LlamaContextAttentionLayer<T>* context_attention_layer_{};
-    LlamaFfnLayer<T>*              silu_ffn_layer_{};
+    // LlamaContextAttentionLayer<T>* context_attention_layer_{};
+    // LlamaFfnLayer<T>*              silu_ffn_layer_{};
+    size_t attn_head_num_;
+    size_t attn_size_per_head_;
+    size_t attn_local_kv_head_num_;
+    size_t attn_local_head_num_;
+    size_t attn_head_n_rep_;
+    LlamaAttentionParams attn_params_;
 
     const DataType data_type_;
 
@@ -69,18 +76,18 @@ protected:
         size_t  max_key_len;
         Tensor* k_cache;
         Tensor* v_cache;
-        int*    input_length{};
-        int*    history_length{};
-        int*    context_length{};
+        int32_t*    input_length{};
+        int32_t*    history_length{};
+        int32_t*    context_length{};
 
         const std::vector<LlamaDecoderLayerWeight<T>*>* weights;
     };
 
-    void forwardSelfAttn(const Session&                                 sess,
-                         T*                                             attn_io,
-                         const std::unordered_map<std::string, Tensor>* input_tensors,
-                         int                                            layer,
-                         bool                                           is_final);
+    // void forwardSelfAttn(const Session&                                 sess,
+    //                      T*                                             attn_io,
+    //                      const std::unordered_map<std::string, Tensor>* input_tensors,
+    //                      int                                            layer,
+    //                      bool                                           is_final);
 
 public:
     LlamaContextDecoder(size_t                      head_num,
@@ -91,12 +98,12 @@ public:
                         const LlamaAttentionParams& attn_params,
                         float                       rmsnorm_eps,
                         NcclParam                   tensor_para,
-                        cudaStream_t                stream,
-                        cublasMMWrapper*            cublas_wrapper,
+                        dipu::deviceStream_t                stream,
+                        void*            cublas_wrapper,
                         IAllocator*                 allocator,
                         bool                        is_free_buffer_after_forward,
                         bool                        use_fmha,
-                        int                         quant_policy);
+                        int32_t                         quant_policy);
 
     ~LlamaContextDecoder() override;
 

@@ -53,6 +53,7 @@ Logger::Logger()
             level_name = nullptr;
         }
     }
+    setLevel(DEBUG);
 }
 
 }  // namespace turbomind

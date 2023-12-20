@@ -3,10 +3,12 @@
 #include "src/turbomind/utils/allocator.h"
 #include "src/turbomind/utils/logger.h"
 #include <cstdint>
-#include <cuda_runtime.h>
+// #include <cuda_runtime.h>
 #include <queue>
 #include <unordered_map>
 #include <vector>
+
+#include "src/turbomind/runtime/diopirt/diopirt_impl.h"
 
 namespace turbomind {
 
@@ -50,22 +52,22 @@ public:
         size_t   max_seq_len;
 
         // payloads
-        std::vector<int> token_ids;  // all token ids
+        std::vector<int32_t> token_ids;  // all token ids
         size_t           cache_len;  // cache_len == 0 -> cache miss
         void*            k_cache;
         void*            v_cache;
 
-        std::vector<uint8_t> random_state_;  // states for RNGs
+        std::vector<dipu::DIPURawGeneratorImpl> random_state_;  // states for RNGs
 
         // for LRU policy
         uint64_t timestamp;
     };
 
-    Sequence create(uint64_t id, cudaStream_t stream);
+    Sequence create(uint64_t id, dipu::deviceStream_t stream);
 
-    Sequence fetch(uint64_t id, cudaStream_t stream);
+    Sequence fetch(uint64_t id, dipu::deviceStream_t stream);
 
-    void update(const Sequence& seq, cudaStream_t stream);
+    void update(const Sequence& seq, dipu::deviceStream_t stream);
 
     void erase(uint64_t id);
 

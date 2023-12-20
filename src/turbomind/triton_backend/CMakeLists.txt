@@ -43,7 +43,7 @@ endif()
 #
 # Options
 #
-option(TRITON_ENABLE_GPU "Enable GPU support in backend" ON)
+option(TRITON_ENABLE_GPU "Enable GPU support in backend" OFF)
 option(TRITON_ENABLE_STATS "Include statistics collections in backend" ON)
 
 set(TRITON_PYTORCH_INCLUDE_PATHS "" CACHE PATH "Paths to Torch includes")
@@ -91,9 +91,9 @@ FetchContent_MakeAvailable(repo-common repo-core repo-backend)
 #
 # CUDA
 #
-if(${TRITON_ENABLE_GPU})
-  find_package(CUDAToolkit REQUIRED)
-endif() # TRITON_ENABLE_GPU
+# if(${TRITON_ENABLE_GPU})
+#   find_package(CUDAToolkit REQUIRED)
+# endif() # TRITON_ENABLE_GPU
 
 #
 # Shared library implementing the Triton Backend API
@@ -109,14 +109,14 @@ add_library(
   TritonTurboMindBackend::triton-turbomind-backend ALIAS triton-turbomind-backend
 )
 
-find_package(CUDAToolkit REQUIRED)
-find_package(CUDA 10.1 REQUIRED)
-if (${CUDA_VERSION} GREATER_EQUAL 11.0)
-  message(STATUS "Add DCUDA11_MODE")
-  add_definitions("-DCUDA11_MODE")
-endif()
+# find_package(CUDAToolkit REQUIRED)
+# find_package(CUDA 10.1 REQUIRED)
+# if (${CUDA_VERSION} GREATER_EQUAL 11.0)
+#   message(STATUS "Add DCUDA11_MODE")
+#   add_definitions("-DCUDA11_MODE")
+# endif()
 
-set(CUDA_PATH ${CUDA_TOOLKIT_ROOT_DIR})
+# set(CUDA_PATH ${CUDA_TOOLKIT_ROOT_DIR})
 
 target_compile_definitions(triton-turbomind-backend PUBLIC
   USE_TRITONSERVER_DATATYPE)
@@ -133,15 +133,15 @@ target_include_directories(
   ${TRITON_PYTORCH_INCLUDE_PATHS}
   ${Python3_INCLUDE_DIRS}
   ${repo-ft_SOURCE_DIR}
-  ${repo-ft_SOURCE_DIR}/3rdparty/cutlass/include
+  # ${repo-ft_SOURCE_DIR}/3rdparty/cutlass/include
   ${repo-core_SOURCE_DIR}/include
   )
 
-target_link_directories(
-  triton-turbomind-backend
-  PRIVATE
-  ${CUDA_PATH}/lib64
-  )
+# target_link_directories(
+#   triton-turbomind-backend
+#   PRIVATE
+#   ${CUDA_PATH}/lib64
+#   )
 
 target_compile_features(triton-turbomind-backend PRIVATE cxx_std_14)
 
@@ -151,12 +151,12 @@ target_compile_options(
     -Wall -Wextra -Wno-unused-parameter -Wno-type-limits >#-Werror>
 )
 
-if(${TRITON_ENABLE_GPU})
-  target_compile_definitions(
-    triton-turbomind-backend
-    PRIVATE TRITON_ENABLE_GPU=1
-  )
-endif() # TRITON_ENABLE_GPU
+# if(${TRITON_ENABLE_GPU})
+#   target_compile_definitions(
+#     triton-turbomind-backend
+#     PRIVATE TRITON_ENABLE_GPU=1
+#   )
+# endif() # TRITON_ENABLE_GPU
 
 set_target_properties(
   triton-turbomind-backend
@@ -193,10 +193,10 @@ target_link_libraries(
     triton-backend-utils   # from repo-backend
     transformer-shared     # from repo-ft
     ${TRITON_PYTORCH_LDFLAGS}
-    -lcublas
-    -lcublasLt
-    -lcudart
-    -lcurand
+    # -lcublas
+    # -lcublasLt
+    # -lcudart
+    # -lcurand
 )
 
 if (BUILD_MULTI_GPU)
@@ -219,18 +219,18 @@ if (BUILD_MULTI_GPU)
   target_link_libraries(
     triton-turbomind-backend
     PRIVATE
-      ${NCCL_LIBRARIES}
+      # ${NCCL_LIBRARIES}
       ${MPI_LIBRARIES}
   )
 endif()
 
-if(${TRITON_ENABLE_GPU})
-  target_link_libraries(
-    triton-turbomind-backend
-    PRIVATE
-      CUDA::cudart
-  )
-endif() # TRITON_ENABLE_GPU
+# if(${TRITON_ENABLE_GPU})
+#   target_link_libraries(
+#     triton-turbomind-backend
+#     PRIVATE
+#       CUDA::cudart
+#   )
+# endif() # TRITON_ENABLE_GPU
 
 #
 # Install

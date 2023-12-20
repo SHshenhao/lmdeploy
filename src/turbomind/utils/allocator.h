@@ -21,9 +21,10 @@
 
 #include "cuda_utils.h"
 #include "src/turbomind/macro.h"
-#include <cuda_runtime.h>
+// #include <cuda_runtime.h>
 #include <unordered_map>
 #include <vector>
+#include <math.h>
 
 #ifdef GOOGLE_CUDA
 #include "tensorflow/core/framework/op.h"
@@ -44,9 +45,9 @@
 
 #include "src/turbomind/utils/logger.h"
 
-#if defined(CUDART_VERSION) && CUDART_VERSION < 11020
-#define CUDA_MEMORY_POOL_DISABLED
-#endif
+// #if defined(CUDART_VERSION) && CUDART_VERSION < 11020
+// #define CUDA_MEMORY_POOL_DISABLED
+// #endif
 
 namespace turbomind {
 

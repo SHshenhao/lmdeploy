@@ -16,10 +16,10 @@
 
 #include "src/turbomind/macro.h"
 #include "src/turbomind/utils/Tensor.h"
-#include "src/turbomind/utils/cuda_type_utils.cuh"
+// #include "src/turbomind/utils/cuda_type_utils.cuh"
 #include "src/turbomind/utils/logger.h"
 #include "src/turbomind/utils/memory_utils.h"
-#include <curand_kernel.h>
+// #include <curand_kernel.h>
 #include <sys/stat.h>
 #include <unordered_map>
 
@@ -53,7 +53,7 @@ template<typename T>
 void deviceMemSetZero(T* ptr, size_t size)
 {
     T* arr = new T[size];
-    std::fill(arr, arr + size, 0);
+    memset(arr, 0, sizeof(T) * size);
     check_cuda_error(dipu::devapis::memCopyH2D(sizeof(T) * size, ptr, arr));
     delete[] arr;
 }
@@ -466,11 +466,13 @@ int loadWeightFromBinFunc(T*                        ptr,
         cudaH2Dcpy(ptr, (T*)host_array.data(), host_array.size());
     }
     else {
-        T_IN* ptr_2 = nullptr;
-        deviceMalloc(&ptr_2, host_array.size(), false);
-        cudaH2Dcpy(ptr_2, host_array.data(), host_array.size());
-        invokeCudaD2DcpyConvert(ptr, ptr_2, host_array.size());
-        deviceFree(ptr_2);
+        // T_IN* ptr_2 = nullptr;
+        // deviceMalloc(&ptr_2, host_array.size(), false);
+        // cudaH2Dcpy(ptr_2, host_array.data(), host_array.size());
+        // invokeCudaD2DcpyConvert(ptr, ptr_2, host_array.size());
+        // deviceFree(ptr_2);
+        std::cout<<"loadWeightFromBinFunc T != T_IN"<<std::endl;
+        exit(0);
     }
     return 0;
 }
@@ -608,38 +610,38 @@ template int loadWeightFromBin(int*                      ptr,
                                FtCudaDataType            model_file_type,
                                std::vector<ConcateSlice> slices);
 
-template<typename T_IN, typename T_OUT>
-__global__ void cudaD2DcpyConvert(T_OUT* dst, const T_IN* src, const size_t size)
-{
-    for (size_t tid = threadIdx.x + blockIdx.x * blockDim.x; tid < size; tid += blockDim.x * gridDim.x) {
-        dst[tid] = cuda_cast<T_OUT>(src[tid]);
-    }
-}
+// template<typename T_IN, typename T_OUT>
+// __global__ void cudaD2DcpyConvert(T_OUT* dst, const T_IN* src, const size_t size)
+// {
+//     for (size_t tid = threadIdx.x + blockIdx.x * blockDim.x; tid < size; tid += blockDim.x * gridDim.x) {
+//         dst[tid] = cuda_cast<T_OUT>(src[tid]);
+//     }
+// }
 
-template<typename T_IN, typename T_OUT>
-void invokeCudaD2DcpyConvert(T_OUT* tgt, const T_IN* src, const size_t size, cudaStream_t stream)
-{
-    cudaD2DcpyConvert<<<256, 256, 0, stream>>>(tgt, src, size);
-}
+// template<typename T_IN, typename T_OUT>
+// void invokeCudaD2DcpyConvert(T_OUT* tgt, const T_IN* src, const size_t size, cudaStream_t stream)
+// {
+//     cudaD2DcpyConvert<<<256, 256, 0, stream>>>(tgt, src, size);
+// }
 
-template void invokeCudaD2DcpyConvert(int8_t* tgt, const float* src, const size_t size, cudaStream_t stream);
-template void invokeCudaD2DcpyConvert(float* tgt, const int8_t* src, const size_t size, cudaStream_t stream);
-template void invokeCudaD2DcpyConvert(float* tgt, const int* src, const size_t size, cudaStream_t stream);
-template void invokeCudaD2DcpyConvert(half* tgt, const int* src, const size_t size, cudaStream_t stream);
-template void invokeCudaD2DcpyConvert(float* tgt, const float* src, const size_t size, cudaStream_t stream);
-template void invokeCudaD2DcpyConvert(half* tgt, const float* src, const size_t size, cudaStream_t stream);
-template void invokeCudaD2DcpyConvert(float* tgt, const half* src, const size_t size, cudaStream_t stream);
-template void invokeCudaD2DcpyConvert(uint* tgt, const int* src, const size_t size, cudaStream_t stream);
-template void invokeCudaD2DcpyConvert(int* tgt, const uint* src, const size_t size, cudaStream_t stream);
-template void invokeCudaD2DcpyConvert(int* tgt, const float* src, const size_t size, cudaStream_t stream);
-template void invokeCudaD2DcpyConvert(int* tgt, const half* src, const size_t size, cudaStream_t stream);
+// template void invokeCudaD2DcpyConvert(int8_t* tgt, const float* src, const size_t size, cudaStream_t stream);
+// template void invokeCudaD2DcpyConvert(float* tgt, const int8_t* src, const size_t size, cudaStream_t stream);
+// template void invokeCudaD2DcpyConvert(float* tgt, const int* src, const size_t size, cudaStream_t stream);
+// template void invokeCudaD2DcpyConvert(half* tgt, const int* src, const size_t size, cudaStream_t stream);
+// template void invokeCudaD2DcpyConvert(float* tgt, const float* src, const size_t size, cudaStream_t stream);
+// template void invokeCudaD2DcpyConvert(half* tgt, const float* src, const size_t size, cudaStream_t stream);
+// template void invokeCudaD2DcpyConvert(float* tgt, const half* src, const size_t size, cudaStream_t stream);
+// template void invokeCudaD2DcpyConvert(uint* tgt, const int* src, const size_t size, cudaStream_t stream);
+// template void invokeCudaD2DcpyConvert(int* tgt, const uint* src, const size_t size, cudaStream_t stream);
+// template void invokeCudaD2DcpyConvert(int* tgt, const float* src, const size_t size, cudaStream_t stream);
+// template void invokeCudaD2DcpyConvert(int* tgt, const half* src, const size_t size, cudaStream_t stream);
 
-#ifdef ENABLE_BF16
-template void invokeCudaD2DcpyConvert(__nv_bfloat16* tgt, const float* src, const size_t size, cudaStream_t stream);
-template void invokeCudaD2DcpyConvert(__nv_bfloat16* tgt, const int* src, const size_t size, cudaStream_t stream);
-template void invokeCudaD2DcpyConvert(float* tgt, const __nv_bfloat16* src, const size_t size, cudaStream_t stream);
-template void invokeCudaD2DcpyConvert(int* tgt, const __nv_bfloat16* src, const size_t size, cudaStream_t stream);
-#endif  // ENABLE_BF16
+// #ifdef ENABLE_BF16
+// template void invokeCudaD2DcpyConvert(__nv_bfloat16* tgt, const float* src, const size_t size, cudaStream_t stream);
+// template void invokeCudaD2DcpyConvert(__nv_bfloat16* tgt, const int* src, const size_t size, cudaStream_t stream);
+// template void invokeCudaD2DcpyConvert(float* tgt, const __nv_bfloat16* src, const size_t size, cudaStream_t stream);
+// template void invokeCudaD2DcpyConvert(int* tgt, const __nv_bfloat16* src, const size_t size, cudaStream_t stream);
+// #endif  // ENABLE_BF16
 
 // template<typename T_IN, typename T_OUT>
 // __global__ void
@@ -672,15 +674,15 @@ template void invokeCudaD2DcpyConvert(int* tgt, const __nv_bfloat16* src, const 
 // #endif  // ENABLE_FP8
 // clang-format on
 
-void invokeCudaD2DcpyHalf2Float(float* dst, half* src, const size_t size, cudaStream_t stream)
-{
-    invokeCudaD2DcpyConvert(dst, src, size, stream);
-}
+// void invokeCudaD2DcpyHalf2Float(float* dst, half* src, const size_t size, cudaStream_t stream)
+// {
+//     invokeCudaD2DcpyConvert(dst, src, size, stream);
+// }
 
-void invokeCudaD2DcpyFloat2Half(half* dst, float* src, const size_t size, cudaStream_t stream)
-{
-    invokeCudaD2DcpyConvert(dst, src, size, stream);
-}
+// void invokeCudaD2DcpyFloat2Half(half* dst, float* src, const size_t size, cudaStream_t stream)
+// {
+//     invokeCudaD2DcpyConvert(dst, src, size, stream);
+// }
 
 template<typename T>
 void saveToBinary(const T* ptr, const size_t size, std::string filename)
@@ -732,68 +734,68 @@ void saveToBinary(const int* ptr, const size_t size, std::string filename)
 //     fakeCast<T_IN, T_fake_type><<<grid, block, 0, stream>>>(input_ptr, size);
 // }
 
-#ifdef ENABLE_FP8
-__global__ void cudaD2Dcpyfp82Float(float* dst, __nv_fp8_e4m3* src, const size_t size)
-{
-    for (size_t tid = threadIdx.x + blockIdx.x * blockDim.x; tid < size; tid += blockDim.x * gridDim.x) {
-        dst[tid] = (float)(src[tid]);
-    }
-}
+// #ifdef ENABLE_FP8
+// __global__ void cudaD2Dcpyfp82Float(float* dst, __nv_fp8_e4m3* src, const size_t size)
+// {
+//     for (size_t tid = threadIdx.x + blockIdx.x * blockDim.x; tid < size; tid += blockDim.x * gridDim.x) {
+//         dst[tid] = (float)(src[tid]);
+//     }
+// }
 
-void invokeCudaD2Dcpyfp82Float(float* dst, __nv_fp8_e4m3* src, const size_t size, cudaStream_t stream)
-{
-    cudaD2Dcpyfp82Float<<<256, 256, 0, stream>>>(dst, src, size);
-}
+// void invokeCudaD2Dcpyfp82Float(float* dst, __nv_fp8_e4m3* src, const size_t size, cudaStream_t stream)
+// {
+//     cudaD2Dcpyfp82Float<<<256, 256, 0, stream>>>(dst, src, size);
+// }
 
-__global__ void cudaD2Dcpyfp82Half(half* dst, __nv_fp8_e4m3* src, const size_t size)
-{
-    for (size_t tid = threadIdx.x + blockIdx.x * blockDim.x; tid < size; tid += blockDim.x * gridDim.x) {
-        dst[tid] = (half)((float)(src[tid]));
-    }
-}
+// __global__ void cudaD2Dcpyfp82Half(half* dst, __nv_fp8_e4m3* src, const size_t size)
+// {
+//     for (size_t tid = threadIdx.x + blockIdx.x * blockDim.x; tid < size; tid += blockDim.x * gridDim.x) {
+//         dst[tid] = (half)((float)(src[tid]));
+//     }
+// }
 
-void invokeCudaD2Dcpyfp82Half(half* dst, __nv_fp8_e4m3* src, const size_t size, cudaStream_t stream)
-{
-    cudaD2Dcpyfp82Half<<<256, 256, 0, stream>>>(dst, src, size);
-}
+// void invokeCudaD2Dcpyfp82Half(half* dst, __nv_fp8_e4m3* src, const size_t size, cudaStream_t stream)
+// {
+//     cudaD2Dcpyfp82Half<<<256, 256, 0, stream>>>(dst, src, size);
+// }
 
-__global__ void cudaD2DcpyFloat2fp8(__nv_fp8_e4m3* dst, float* src, const size_t size)
-{
-    for (size_t tid = threadIdx.x + blockIdx.x * blockDim.x; tid < size; tid += blockDim.x * gridDim.x) {
-        dst[tid] = (__nv_fp8_e4m3)src[tid];
-    }
-}
+// __global__ void cudaD2DcpyFloat2fp8(__nv_fp8_e4m3* dst, float* src, const size_t size)
+// {
+//     for (size_t tid = threadIdx.x + blockIdx.x * blockDim.x; tid < size; tid += blockDim.x * gridDim.x) {
+//         dst[tid] = (__nv_fp8_e4m3)src[tid];
+//     }
+// }
 
-void invokeCudaD2DcpyFloat2fp8(__nv_fp8_e4m3* dst, float* src, const size_t size, cudaStream_t stream)
-{
-    cudaD2DcpyFloat2fp8<<<256, 256, 0, stream>>>(dst, src, size);
-}
+// void invokeCudaD2DcpyFloat2fp8(__nv_fp8_e4m3* dst, float* src, const size_t size, cudaStream_t stream)
+// {
+//     cudaD2DcpyFloat2fp8<<<256, 256, 0, stream>>>(dst, src, size);
+// }
 
-__global__ void cudaD2DcpyHalf2fp8(__nv_fp8_e4m3* dst, half* src, const size_t size)
-{
-    for (size_t tid = threadIdx.x + blockIdx.x * blockDim.x; tid < size; tid += blockDim.x * gridDim.x) {
-        dst[tid] = (__nv_fp8_e4m3)src[tid];
-    }
-}
+// __global__ void cudaD2DcpyHalf2fp8(__nv_fp8_e4m3* dst, half* src, const size_t size)
+// {
+//     for (size_t tid = threadIdx.x + blockIdx.x * blockDim.x; tid < size; tid += blockDim.x * gridDim.x) {
+//         dst[tid] = (__nv_fp8_e4m3)src[tid];
+//     }
+// }
 
-void invokeCudaD2DcpyHalf2fp8(__nv_fp8_e4m3* dst, half* src, const size_t size, cudaStream_t stream)
-{
-    cudaD2DcpyHalf2fp8<<<256, 256, 0, stream>>>(dst, src, size);
-}
+// void invokeCudaD2DcpyHalf2fp8(__nv_fp8_e4m3* dst, half* src, const size_t size, cudaStream_t stream)
+// {
+//     cudaD2DcpyHalf2fp8<<<256, 256, 0, stream>>>(dst, src, size);
+// }
 
-__global__ void cudaD2DcpyBfloat2fp8(__nv_fp8_e4m3* dst, __nv_bfloat16* src, const size_t size)
-{
-    for (size_t tid = threadIdx.x + blockIdx.x * blockDim.x; tid < size; tid += blockDim.x * gridDim.x) {
-        dst[tid] = (__nv_fp8_e4m3)src[tid];
-    }
-}
+// __global__ void cudaD2DcpyBfloat2fp8(__nv_fp8_e4m3* dst, __nv_bfloat16* src, const size_t size)
+// {
+//     for (size_t tid = threadIdx.x + blockIdx.x * blockDim.x; tid < size; tid += blockDim.x * gridDim.x) {
+//         dst[tid] = (__nv_fp8_e4m3)src[tid];
+//     }
+// }
 
-void invokeCudaD2DcpyBfloat2fp8(__nv_fp8_e4m3* dst, __nv_bfloat16* src, const size_t size, cudaStream_t stream)
-{
-    cudaD2DcpyBfloat2fp8<<<256, 256, 0, stream>>>(dst, src, size);
-}
+// void invokeCudaD2DcpyBfloat2fp8(__nv_fp8_e4m3* dst, __nv_bfloat16* src, const size_t size, cudaStream_t stream)
+// {
+//     cudaD2DcpyBfloat2fp8<<<256, 256, 0, stream>>>(dst, src, size);
+// }
 
-#endif  // ENABLE_FP8
+// #endif  // ENABLE_FP8
 
 // template<typename T_OUT, typename T_IN>
 // __global__ void transpose(T_OUT* dst, T_IN* src, const int dim0, const int dim1)

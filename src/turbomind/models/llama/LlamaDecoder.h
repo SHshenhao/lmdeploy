@@ -21,8 +21,8 @@
 
 #include "src/turbomind/layers/BaseLayer.h"
 #include "src/turbomind/models/llama/LlamaDecoderLayerWeight.h"
-#include "src/turbomind/models/llama/LlamaDecoderSelfAttentionLayer.h"
-#include "src/turbomind/models/llama/LlamaFfnLayer.h"
+// #include "src/turbomind/models/llama/LlamaDecoderSelfAttentionLayer.h"
+// #include "src/turbomind/models/llama/LlamaFfnLayer.h"
 #include "src/turbomind/models/llama/llama_params.h"
 #include "src/turbomind/utils/custom_ar_comm.h"
 #include "src/turbomind/utils/nccl_utils.h"
@@ -44,10 +44,19 @@ protected:
     size_t hidden_units_;
     float  rmsnorm_eps_;
 
+    size_t attn_head_num_;
+    size_t attn_size_per_head_;
+    size_t attn_local_kv_head_num_;
+    size_t attn_local_head_num_;
+    size_t attn_head_n_rep_;
+
     NcclParam tensor_para_;
 
-    LlamaDecoderSelfAttentionLayer<T>* self_attention_layer_{};
-    LlamaFfnLayer<T>*                  silu_ffn_layer_{};
+    // LlamaDecoderSelfAttentionLayer<T>* self_attention_layer_{};
+    // LlamaFfnLayer<T>*                  silu_ffn_layer_{};
+    void* workspace_{};
+
+    LlamaAttentionParams attn_params_;
 
     const DataType data_type_;
 
@@ -60,12 +69,12 @@ protected:
         const std::vector<LlamaDecoderLayerWeight<T>*>* weights;
     };
 
-    void forwardSelfAttn(const Session&                                 sess,
-                         T*                                             attn_io,
-                         const std::unordered_map<std::string, Tensor>* input_tensors,
-                         size_t                                         layer);
+    // void forwardSelfAttn(const Session&                                 sess,
+    //                      T*                                             attn_io,
+    //                      const std::unordered_map<std::string, Tensor>* input_tensors,
+    //                      size_t                                         layer);
 
-    void forwardFfn(const LlamaDecoder::Session& sess, T* ffn_io, size_t layer);
+    // void forwardFfn(const LlamaDecoder::Session& sess, T* ffn_io, size_t layer);
 
 public:
     LlamaDecoder(size_t                      head_num,
@@ -76,11 +85,11 @@ public:
                  const LlamaAttentionParams& attn_params,
                  float                       rmsnorm_eps,
                  NcclParam                   tensor_para,
-                 cudaStream_t                stream,
-                 cublasMMWrapper*            cublas_wrapper,
+                 dipu::deviceStream_t                stream,
+                 void*            cublas_wrapper,
                  IAllocator*                 allocator,
                  bool                        is_free_buffer_after_forward,
-                 int                         quant_policy);
+                 int32_t                         quant_policy);
 
     ~LlamaDecoder() override;
 

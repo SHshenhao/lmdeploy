@@ -56,6 +56,7 @@ private:
     using BaseSamplingLayer<T>::runtime_logits_buf_;
 
     using BaseSamplingLayer<T>::stream_;
+    using BaseSamplingLayer<T>::ctx_;
     using BaseSamplingLayer<T>::allocator_;
     using BaseSamplingLayer<T>::is_allocate_buffer_;
     using BaseSamplingLayer<T>::cuda_device_prop_;
@@ -71,11 +72,11 @@ public:
                       float              temperature,
                       float              len_penalty,
                       float              repetition_penalty,
-                      cudaStream_t       stream,
-                      cublasMMWrapper*   cublas_wrapper,
+                      dipu::deviceStream_t       stream,
+                      void*   cublas_wrapper,
                       IAllocator*        allocator,
                       bool               is_free_buffer_after_forward,
-                      cudaDeviceProp*    cuda_device_prop);
+                      void*    cuda_device_prop);
     TopPSamplingLayer(TopPSamplingLayer<T> const& top_p_sampling_layer);
     ~TopPSamplingLayer();
 

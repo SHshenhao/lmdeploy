@@ -57,7 +57,7 @@
 #include "src/turbomind/triton_backend/llama/LlamaTritonModelInstance.h"
 #include "src/turbomind/triton_backend/transformer_triton_backend.hpp"
 #include "src/turbomind/utils/Tensor.h"
-#include "src/turbomind/utils/cuda_bf16_wrapper.h"
+// #include "src/turbomind/utils/cuda_bf16_wrapper.h"
 #include "src/turbomind/utils/instance_comm.h"
 #include "src/turbomind/utils/mpi_utils.h"
 #include "src/turbomind/utils/nccl_utils.h"
@@ -79,15 +79,15 @@ namespace turbomind_backend {
         }                                                                                                              \
     } while (false)
 
-// Cuda Error handling
-TRITONSERVER_Error*
-ConvertCUDAStatusToTritonError(cudaError_t cuda_error, TRITONSERVER_Error_Code code, const char* msg)
-{
-    if (cuda_error != cudaSuccess) {
-        return TRITONSERVER_ErrorNew(code, cudaGetErrorString(cuda_error));
-    }
-    return nullptr;  // success
-}
+// // Cuda Error handling
+// TRITONSERVER_Error*
+// ConvertCUDAStatusToTritonError(cudaError_t cuda_error, TRITONSERVER_Error_Code code, const char* msg)
+// {
+//     if (cuda_error != cudaSuccess) {
+//         return TRITONSERVER_ErrorNew(code, cudaGetErrorString(cuda_error));
+//     }
+//     return nullptr;  // success
+// }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -171,7 +171,7 @@ private:
     int                                       instance_group_count      = 1;
     std::shared_ptr<AbstractTransformerModel> ft_model;
     int                                       node_id, gpu_size, world_size, tp_pp_size;
-    std::vector<cudaStream_t>                 streams_;
+    std::vector<dipu::deviceStream_t>                 streams_;
 
     std::shared_ptr<AbstractTransformerModel> ModelFactory(common::TritonJson::Value& param,
                                                            const std::string&         model_filename);
@@ -386,7 +386,7 @@ ModelState::ModelState(TRITONBACKEND_Model* triton_model): BackendModel(triton_m
     */
     std::vector<std::thread> threads;
     LOG_MESSAGE(TRITONSERVER_LOG_INFO, (std::string("Before Loading Weights:")).c_str());
-    ft::print_mem_usage();
+    // ft::print_mem_usage();
     for (int gid = 0; gid < total_weight_gpu_size; gid++) {
         int rank = node_id * gpu_size + gid % tp_pp_size;
         threads.push_back(std::thread(&AbstractTransformerModel::createSharedWeights, ft_model, gid, rank));
@@ -395,7 +395,7 @@ ModelState::ModelState(TRITONBACKEND_Model* triton_model): BackendModel(triton_m
         t.join();
     }
     LOG_MESSAGE(TRITONSERVER_LOG_INFO, (std::string("After Loading Weights:")).c_str());
-    ft::print_mem_usage();
+    // ft::print_mem_usage();
 }
 
 TRITONSERVER_Error*
@@ -409,9 +409,11 @@ ModelState::LoadModel(const std::string&                                        
                       std::string*                                                       model_path,
                       std::unique_ptr<AbstractTransformerModelInstance>*                 ft_model_instance)
 {
-    LOG_IF_ERROR(ConvertCUDAStatusToTritonError(
-                     cudaSetDevice(device_id), TRITONSERVER_ERROR_INTERNAL, "Failed to set cuda device"),
-                 "Failed to set cuda device");
+    // LOG_IF_ERROR(ConvertCUDAStatusToTritonError(
+    //                  cudaSetDevice(device_id), TRITONSERVER_ERROR_INTERNAL, "Failed to set cuda device"),
+    //              "Failed to set cuda device");
+    // TODO update ConvertCUDAStatusToTritonError
+    dipu::devapis::setDevice(device_id);
 
     std::string cc_model_filename = artifact_name;
     if (cc_model_filename.empty()) {
@@ -421,12 +423,14 @@ ModelState::LoadModel(const std::string&                                        
     if (!node_id && !device_id) {
         LOG_MESSAGE(TRITONSERVER_LOG_INFO, (std::string("Before Loading Model:")).c_str());
     }
-    ft::print_mem_usage();
+    // ft::print_mem_usage();
 
-    LOG_IF_ERROR(ConvertCUDAStatusToTritonError(cudaStreamCreate(&streams_[stream_id]),
-                                                TRITONSERVER_ERROR_INTERNAL,
-                                                "Failed to create the stream"),
-                 "Failed to create the stream");
+    // LOG_IF_ERROR(ConvertCUDAStatusToTritonError(cudaStreamCreate(&streams_[stream_id]),
+    //                                             TRITONSERVER_ERROR_INTERNAL,
+    //                                             "Failed to create the stream"),
+    //              "Failed to create the stream");
+    // TODO update ConvertCUDAStatusToTritonError
+    dipu::devapis::createStream(&streams_[stream_id]);
 
     const int rank = node_id * GetGpuSize() + device_id - device_id_start;
 
@@ -437,7 +441,7 @@ ModelState::LoadModel(const std::string&                                        
     if (!node_id && !device_id) {
         LOG_MESSAGE(TRITONSERVER_LOG_INFO, (std::string("After Loading Model:")).c_str());
     }
-    ft::print_mem_usage();
+    // ft::print_mem_usage();
 
     return nullptr;  // success
 }
@@ -626,7 +630,7 @@ private:
     int model_instance_device_id_start_ = 0;
 
     // output tensor stream
-    cudaStream_t output_stream_;
+    dipu::deviceStream_t output_stream_;
 
     // tensor parallel + pipeline parallel
     int gpu_size_   = 1;
@@ -737,13 +741,17 @@ ModelInstanceState::ModelInstanceState(ModelState* model_state, TRITONBACKEND_Mo
     // GPUs
     model_instance_device_id_start_ = (model_instance_id_ * model_instance_gpu_size_) % gpu_size_;
     // create output tensor stream
-    LOG_IF_ERROR(ConvertCUDAStatusToTritonError(cudaSetDevice(model_instance_device_id_start_),
-                                                TRITONSERVER_ERROR_INTERNAL,
-                                                "Failed to set cuda device"),
-                 "Failed to set cuda device");
-    LOG_IF_ERROR(ConvertCUDAStatusToTritonError(
-                     cudaStreamCreate(&output_stream_), TRITONSERVER_ERROR_INTERNAL, "Failed to create the stream"),
-                 "Failed to create the stream");
+    // LOG_IF_ERROR(ConvertCUDAStatusToTritonError(cudaSetDevice(model_instance_device_id_start_),
+    //                                             TRITONSERVER_ERROR_INTERNAL,
+    //                                             "Failed to set cuda device"),
+    //              "Failed to set cuda device");
+    // LOG_IF_ERROR(ConvertCUDAStatusToTritonError(
+    //                  cudaStreamCreate(&output_stream_), TRITONSERVER_ERROR_INTERNAL, "Failed to create the stream"),
+    //              "Failed to create the stream");
+    // TODO update ConvertCUDAStatusToTritonError
+    dipu::devapis::setDevice(model_instance_device_id_start_);
+    // TODO update ConvertCUDAStatusToTritonError
+    dipu::devapis::createStream(&output_stream_);
 
     // create nccl params
     nccl_params_ = shared_ft_model->createNcclParams(node_id, model_instance_device_id_start_, num_nodes > 1);
@@ -761,7 +769,8 @@ ModelInstanceState::ModelInstanceState(ModelState* model_state, TRITONBACKEND_Mo
                                       model_instance_device_id_start_,
                                       model_instance_id_ * model_instance_gpu_size_ + gid,
                                       nccl_params_,
-                                      custom_all_reduce_comms_[gid - model_instance_device_id_start_],
+                                    //   custom_all_reduce_comms_[gid - model_instance_device_id_start_],
+                                      nullptr,
                                       &model_path_,
                                       &ft_model_instance_[gid - model_instance_device_id_start_]));
     }
@@ -1067,7 +1076,7 @@ void ModelInstanceState::ProcessRequests(TRITONBACKEND_Request** requests, const
                                     &responses,
                                     model_state_->TritonMemoryManager(),
                                     model_state_->EnablePinnedInput(),
-                                    CudaStream());
+                                    CudaStream()); // CudaStream() should return nullptr
     SetInputTensors(total_batch_size,
                     requests,
                     request_count,
@@ -1180,9 +1189,11 @@ int ThreadForward(std::unique_ptr<AbstractTransformerModelInstance>*        ft_m
                   const int                                                 use_stream_cb,
                   stream_callback_ctx_t*                                    context)
 {
-    LOG_IF_ERROR(ConvertCUDAStatusToTritonError(
-                     cudaSetDevice(device_id), TRITONSERVER_ERROR_INTERNAL, "Failed to set cuda device"),
-                 "Failed to set cuda device");
+    // LOG_IF_ERROR(ConvertCUDAStatusToTritonError(
+    //                  cudaSetDevice(device_id), TRITONSERVER_ERROR_INTERNAL, "Failed to set cuda device"),
+    //              "Failed to set cuda device");
+    // TODO update ConvertCUDAStatusToTritonError
+    dipu::devapis::setDevice(device_id);
 
     LOG_MESSAGE(TRITONSERVER_LOG_VERBOSE, (std::string("Start to forward")).c_str());
     if (use_stream_cb) {
@@ -1663,7 +1674,7 @@ void ModelInstanceState::ReadOutputTensors(size_t                               
                                      model_state_->MaxBatchSize(),
                                      model_state_->TritonMemoryManager(),
                                      model_state_->EnablePinnedInput(),
-                                     output_stream_);
+                                     nullptr);
 
     bool cuda_copy = false;
     // bool sequence_batching_enabled = model_state_->SequenceBatchingEnabled();
@@ -1683,6 +1694,15 @@ void ModelInstanceState::ReadOutputTensors(size_t                               
         LOG_MESSAGE(TRITONSERVER_LOG_VERBOSE,
                     (std::string("    output_type: ") + TRITONSERVER_DataTypeString(output_dtype)).c_str());
 
+        // void* output_data;
+        // const char* output_buffer;
+        // if (output.where == turbomind::MEMORY_GPU ) {
+        //     malloc(&output_data, output.sizeBytes());
+        //     dipu::devapis::memCopyD2H(output.sizeBytes(), output_data, output.data);
+        //     output_buffer = static_cast<const char*>(reinterpret_cast<char*>(output_data));
+        // } else {
+        //     output_buffer = static_cast<const char*>(output.data);
+        // }
         const char* output_buffer = static_cast<const char*>(output.data);
 
         //  Set output shape
@@ -1715,7 +1735,7 @@ void ModelInstanceState::ReadOutputTensors(size_t                               
                                 output_dtype,
                                 batchn_shape,
                                 output_buffer,
-                                TRITONSERVER_MEMORY_GPU,
+                                TRITONSERVER_MEMORY_CPU,
                                 model_instance_device_id_start_);
     }
 

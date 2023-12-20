@@ -6,7 +6,7 @@
 #include <array>
 #include <atomic>
 #include <condition_variable>
-#include <cuda_runtime.h>
+// #include <cuda_runtime.h>
 #include <mutex>
 
 namespace turbomind {
@@ -84,7 +84,7 @@ struct NcclGuard {
     }
 
     NcclParam                                    tensor_para_;
-    cudaStream_t                                 stream_;
+    dipu::deviceStream_t                                 stream_;
     bool                                         barrier_;
     std::unique_ptr<std::lock_guard<std::mutex>> global_nccl_lock_;
 };

@@ -19,16 +19,16 @@
 #include "src/turbomind/utils/cuda_utils.h"
 #include "src/turbomind/utils/logger.h"
 
-#include <cuda_runtime.h>
+// #include <cuda_runtime.h>
 #ifdef BUILD_MULTI_GPU
 #include "src/turbomind/runtime/rthelper.h"
 #endif
 #include <stdio.h>
 #include <string>
 
-#if defined(NCCL_VERSION_CODE) && (NCCL_VERSION_CODE >= 21003)
-#define ENABLE_BF16_NCCL
-#endif
+// #if defined(NCCL_VERSION_CODE) && (NCCL_VERSION_CODE >= 21003)
+// #define ENABLE_BF16_NCCL
+// #endif
 
 namespace turbomind {
 #ifdef BUILD_MULTI_GPU

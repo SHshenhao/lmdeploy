@@ -94,7 +94,7 @@ def profile_throughput(model_path: str,
                        output_seqlen: int = 512,
                        test_round: int = 10,
                        tp: int = 1):
-    import pdb;pdb.set_trace();
+    # import pdb;pdb.set_trace();
     tokenizer_model_path = osp.join(model_path, 'triton_models', 'tokenizer')
     tokenizer = Tokenizer(tokenizer_model_path)
     tm_model = TurboMind(model_path=model_path, tp=tp)
@@ -280,7 +280,7 @@ def parse_args():
 
 
 def main():
-    import pdb;pdb.set_trace();
+    # import pdb;pdb.set_trace();
     args = parse_args()
     os.environ['TM_LOG_LEVEL'] = args.log_level
     results: List[ProfileResult] = []
@@ -301,7 +301,7 @@ def main():
                                         input_seqlen=prompt_tokens,
                                         output_seqlen=completion_tokens,
                                         tp=args.tp)
-            model_name, throughput_per_proc, tp = output[0]
+            model_name, throughput_per_proc, tp = output
             time.sleep(5)  # wait a while for releasing GPU mem
             memory = MemoryMonitor.terminate()
             device_count = MemoryMonitor.device_count.value

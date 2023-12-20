@@ -35,10 +35,10 @@ void move_tensor_H2D(const triton::Tensor&                                      
         tensor_size *= t;
     }
 
-    cudaStream_t stream = (*allocator)->returnStream();
+    dipu::deviceStream_t stream = (*allocator)->returnStream();
 
     d_ptr = (T*)((*allocator)->reMalloc(d_ptr, sizeof(T) * tensor_size, false));
-    check_cuda_error(cudaMemcpyAsync(d_ptr, (T*)tensor.data, sizeof(T) * tensor_size, cudaMemcpyDefault, stream));
+    check_cuda_error(dipu::devapis::memCopyH2DAsync(stream, sizeof(T) * tensor_size, d_ptr, (T*)tensor.data));
 }
 
 template<typename T>

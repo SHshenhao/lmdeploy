@@ -20,19 +20,21 @@
 
 #include "src/turbomind/utils/Tensor.h"
 #include "src/turbomind/utils/allocator.h"
-#include "src/turbomind/utils/cublasMMWrapper.h"
+// #include "src/turbomind/utils/cublasMMWrapper.h"
+#include "src/turbomind/runtime/diopirt/diopirt_impl.h"
 
 namespace turbomind {
 
 class BaseLayer {
 public:
-    BaseLayer(cudaStream_t     stream,
-              cublasMMWrapper* cublas_wrapper,
+    BaseLayer(dipu::deviceStream_t     stream,
+              void* cublas_wrapper,
               IAllocator*      allocator,
               bool             is_free_buffer_after_forward,
-              cudaDeviceProp*  cuda_device_prop = nullptr,
+              void*  cuda_device_prop = nullptr,
               bool             sparse           = false):
         stream_(stream),
+        ctx_(stream),
         cublas_wrapper_(cublas_wrapper),
         allocator_(allocator),
         cuda_device_prop_(cuda_device_prop),
@@ -40,12 +42,12 @@ public:
         sparse_(sparse){};
     virtual ~BaseLayer() = default;
 
-    virtual cudaStream_t getStream()
+    virtual dipu::deviceStream_t getStream()
     {
         return stream_;
     }
 
-    virtual void setStream(cudaStream_t stream)
+    virtual void setStream(dipu::deviceStream_t stream)
     {
         stream_ = stream;
     }
@@ -55,10 +57,11 @@ protected:
     virtual void freeBuffer()     = 0;
 
     // device environments
-    cudaStream_t     stream_;
-    cublasMMWrapper* cublas_wrapper_;
+    dipu::deviceStream_t     stream_;
+    diopiContext ctx_;
+    void* cublas_wrapper_;
     IAllocator*      allocator_;
-    cudaDeviceProp*  cuda_device_prop_ = nullptr;
+    void*  cuda_device_prop_ = nullptr;
 
     bool is_free_buffer_after_forward_;
     bool is_allocate_buffer_ = false;  // TODO (bhsueh) to be deprecated
