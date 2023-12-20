@@ -143,8 +143,8 @@ void TopPSamplingLayer<T>::setup(const size_t batch_size, const size_t beam_widt
         cudaH2Dcpy(runtime_top_p_buf_, runtime_top_p.getPtr<float>(), batch_size);
     }
 
-    dim3 block(std::min((int)batch_size, 256));
-    dim3 grid(div_up((int)batch_size, (int)block.x));
+    // dim3 block(std::min((int)batch_size, 256));
+    // dim3 grid(div_up((int)batch_size, (int)block.x));
 
     const float*    top_p_decay     = runtime_args->getPtr<float>("top_p_decay", nullptr);
     const float*    top_p_min       = runtime_args->getPtr<float>("top_p_min", nullptr);

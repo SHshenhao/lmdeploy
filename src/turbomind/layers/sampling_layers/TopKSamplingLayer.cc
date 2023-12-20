@@ -117,8 +117,8 @@ void TopKSamplingLayer<T>::setup(const size_t batch_size, const size_t beam_widt
         dipu::devapis::memCopyH2DAsync(stream_, sizeof(float) * batch_size, runtime_top_p_buf_, runtime_top_p.getPtr<float>());
     }
 
-    dim3 block(std::min((int)batch_size, 256));
-    dim3 grid(div_up((int)batch_size, (int)block.x));
+    // dim3 block(std::min((int)batch_size, 256));
+    // dim3 grid(div_up((int)batch_size, (int)block.x));
     // support top_k up to 1024.
     // setup_topk_runtime_args<1024><<<grid, block, 0, stream_>>>(batch_size,
     //                                                            top_k,

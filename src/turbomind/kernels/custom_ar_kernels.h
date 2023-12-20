@@ -17,7 +17,7 @@
 #pragma once
 
 #include <assert.h>
-#include <cuda_fp16.h>
+// #include <cuda_fp16.h>
 
 #include <iostream>
 
@@ -56,7 +56,7 @@ struct AllReduceParams {
 };
 
 template<typename T>
-void invokeOneOrTwoShotAllReduceKernel(AllReduceParams<T>& param, cudaStream_t stream);
+void invokeOneOrTwoShotAllReduceKernel(AllReduceParams<T>& param, dipu::deviceStream_t stream);
 
 void kernelLaunchConfig(int& blocks_per_grid, int& threads_per_block, size_t elts, int kernel_algo);
 

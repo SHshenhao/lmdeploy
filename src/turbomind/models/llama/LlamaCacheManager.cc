@@ -65,7 +65,7 @@ void* LlamaCacheManager::allocate(bool is_preallocte)
     return mem_ptr;
 }
 
-auto LlamaCacheManager::create(uint64_t id, cudaStream_t stream) -> Sequence
+auto LlamaCacheManager::create(uint64_t id, dipu::deviceStream_t stream) -> Sequence
 {
     if (rank_ == 0) {
         TM_LOG_INFO("[LlamaCacheManager][create] %ld", (long)id);
@@ -108,7 +108,7 @@ auto LlamaCacheManager::getEntryOrThrow(uint64_t id) -> std::vector<Sequence>::i
     return it;
 }
 
-auto LlamaCacheManager::fetch(uint64_t id, cudaStream_t stream) -> Sequence
+auto LlamaCacheManager::fetch(uint64_t id, dipu::deviceStream_t stream) -> Sequence
 {
     if (rank_ == 0) {
         TM_LOG_INFO("[LlamaCacheManager][fetch] %ld", (long)id);
@@ -128,7 +128,7 @@ auto LlamaCacheManager::fetch(uint64_t id, cudaStream_t stream) -> Sequence
     return *entry;
 }
 
-void LlamaCacheManager::update(const Sequence& seq, cudaStream_t stream)
+void LlamaCacheManager::update(const Sequence& seq, dipu::deviceStream_t stream)
 {
     if (rank_ == 0) {
         TM_LOG_INFO("[LlamaCacheManager][update] %ld", (long)seq.id);

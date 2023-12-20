@@ -1,7 +1,7 @@
 // Copyright (c) OpenMMLab. All rights reserved.
 
 #include "src/turbomind/models/llama/LlamaBatch.h"
-#include "src/turbomind/kernels/decoding_kernels.h"
+// #include "src/turbomind/kernels/decoding_kernels.h"
 #include "src/turbomind/macro.h"
 #include "src/turbomind/models/llama/LlamaNcclGuard.h"
 #include "src/turbomind/models/llama/LlamaV2.h"
@@ -978,11 +978,11 @@ void LlamaBatch<T>::outputContextLogits(T*                      context_decoder_
 
     for (int k = 0; k < indices.size(); ++k) {
         if (output_logits[k]) {
-            check_cuda_error(cudaMemcpyAsync(output_logits[k],
-                                             logits,
-                                             sizeof(float) * llama_->vocab_size_ * lengths[k],
-                                             cudaMemcpyDefault,
-                                             stream_));
+            // check_cuda_error(cudaMemcpyAsync(output_logits[k],
+            //                                  logits,
+            //                                  sizeof(float) * llama_->vocab_size_ * lengths[k],
+            //                                  cudaMemcpyDefault,
+            //                                  stream_));
             check_cuda_error(dipu::devapis::memCopyD2HAsync(stream_, sizeof(float) * llama_->vocab_size_ * lengths[k], output_logits[k], logits));
         }
         logits += llama_->vocab_size_padded_ * lengths[k];

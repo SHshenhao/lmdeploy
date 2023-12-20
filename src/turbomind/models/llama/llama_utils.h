@@ -66,4 +66,17 @@ std::string format(const std::pair<std::string, Tensor>& p);
 
 bool isDebug();
 
+template<typename T>
+void handleOptArg(TensorMap* input_tensors, const std::string& arg_name, T* d_ptr, T default_value, size_t size)
+{
+    if (input_tensors->isExist(arg_name)) {
+        FT_CHECK(input_tensors->at(arg_name).size() == size);
+        // cudaH2Dcpy(d_ptr, input_tensors->at(arg_name).getPtr<const T>(), size);
+        dipu::devapis::memCopyH2D(size, d_ptr, input_tensors->at(arg_name).getPtr<const T>());
+    }
+    else {
+        deviceFill(d_ptr, size, default_value);
+    }
+}
+
 }  // namespace turbomind

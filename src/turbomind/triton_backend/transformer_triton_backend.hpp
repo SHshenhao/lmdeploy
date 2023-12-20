@@ -317,7 +317,7 @@ struct AbstractTransformerModel {
     virtual std::unique_ptr<AbstractTransformerModelInstance>
     createModelInstance(int                                                               deviceId,
                         int                                                               rank,
-                        cudaStream_t                                                      stream,
+                        dipu::deviceStream_t                                                      stream,
                         std::pair<std::vector<ft::NcclParam>, std::vector<ft::NcclParam>> nccl_params,
                         std::shared_ptr<ft::AbstractCustomComm> custom_all_reduce_comm = nullptr) = 0;
 

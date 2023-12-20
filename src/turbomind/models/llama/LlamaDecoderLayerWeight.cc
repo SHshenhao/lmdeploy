@@ -81,9 +81,9 @@ LlamaDecoderLayerWeight<T>::LlamaDecoderLayerWeight(size_t     head_num,
 template<typename T>
 void freeWeights(LlamaDenseWeight<T>& weights)
 {
-    cudaFree(weights.kernel);
-    cudaFree(weights.bias);
-    cudaFree(weights.scales_and_zeros);
+    dipu::devapis::freeDevice(weights.kernel);
+    dipu::devapis::freeDevice(weights.bias);
+    dipu::devapis::freeDevice(weights.scales_and_zeros);
 
     weights.kernel           = nullptr;
     weights.bias             = nullptr;
@@ -241,8 +241,8 @@ void LlamaDecoderLayerWeight<T>::mallocWeights()
 template<typename T>
 LlamaDecoderLayerWeight<T>::~LlamaDecoderLayerWeight()
 {
-    cudaFree((void*)self_attn_norm_weights);
-    cudaFree((void*)ffn_norm_weights);
+    dipu::devapis::freeDevice((void*)self_attn_norm_weights);
+    dipu::devapis::freeDevice((void*)ffn_norm_weights);
 
     freeWeights(self_attn_weights.qkv);
     freeWeights(self_attn_weights.output);

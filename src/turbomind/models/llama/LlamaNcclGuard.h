@@ -33,7 +33,7 @@ struct NcclGuard {
         return array[group_id];
     }
 
-    NcclGuard(NcclParam tensor_para, cudaStream_t stream, bool barrier = false):
+    NcclGuard(NcclParam tensor_para, dipu::deviceStream_t stream, bool barrier = false):
         tensor_para_(tensor_para), stream_(stream), barrier_(barrier)
     {
         if (is_active()) {
