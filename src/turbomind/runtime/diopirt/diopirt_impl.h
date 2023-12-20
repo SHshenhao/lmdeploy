@@ -29,6 +29,10 @@ namespace dipu {
 
 namespace diopi_helper {
 
+diopiError_t clearDiopiContextAll(diopiContext& ctx);
+// num is index, start from zero.index [0, num) is keeped.
+diopiError_t clearDiopiContextAfterN(diopiContext& ctx, int64_t num);
+
 ::diopiTensorHandle_t toDiopiTensorHandle(turbomind::Tensor& tensor);
 ::diopiConstTensorHandle_t toDiopiTensorHandle(const turbomind::Tensor& tensor);
 ::diopiConstTensorHandle_t toDiopiTensorHandle(const turbomind::Tensor* tensor);

@@ -11,10 +11,58 @@
 #include <memory>
 #include <set>
 #include <vector>
+#include <unordered_set>
 
 namespace dipu {
 
 namespace diopi_helper {
+
+diopiError_t clearDiopiContextAll(diopiContext& ctx) {
+    int64_t arraysize{ctx.arrays.size()};
+    if (arraysize <= 0) return diopiSuccess;
+    std::unordered_set<void*> ptr_map;
+    dipu::devapis::syncStream(ctx.stream);
+    for (auto &tensor: ctx.arrays) {
+        if (!tensor.preallocated && tensor.data != nullptr && ptr_map.find(tensor.data) == ptr_map.end()) {
+            if (tensor.where == turbomind::MEMORY_GPU) {
+                dipu::devapis::freeDevice(tensor.data);
+                ptr_map.emplace(tensor.data);
+            }
+            if (tensor.where == turbomind::MEMORY_CPU_PINNED) {
+                dipu::devapis::freeHost(tensor.data);
+                ptr_map.emplace(tensor.data);
+            }
+        }
+    }
+    ptr_map.clear();
+    ctx.arrays.clear();
+    return diopiSuccess;
+}
+
+diopiError_t clearDiopiContextAfterN(diopiContext& ctx, int64_t num) {
+    int64_t arraysize{ctx.arrays.size()};
+    if (arraysize <= num) return diopiSuccess;
+    std::unordered_set<void*> ptr_map;
+    int64_t i = 0;
+    dipu::devapis::syncStream(ctx.stream);
+    for (auto &tensor: ctx.arrays) {
+        ++i;
+        if (i <= num) continue;
+        if (!tensor.preallocated && tensor.data != nullptr && ptr_map.find(tensor.data) == ptr_map.end()) {
+            if (tensor.where == turbomind::MEMORY_GPU) {
+                ptr_map.emplace(tensor.data);
+                dipu::devapis::freeDevice(tensor.data);
+            }
+            if (tensor.where == turbomind::MEMORY_CPU_PINNED) {
+                ptr_map.emplace(tensor.data);
+                dipu::devapis::freeHost(tensor.data);
+            }
+        }
+    }
+    ptr_map.clear();
+    ctx.arrays.resize(std::min(num, arraysize));
+    return diopiSuccess;
+}
 
 ::diopiTensorHandle_t toDiopiTensorHandle(turbomind::Tensor& tensor) {
     return tensor.data == nullptr ? nullptr : reinterpret_cast<::diopiTensorHandle_t>(&tensor);

@@ -35,15 +35,15 @@ DIOPI_RT_API const char* diopiGetVersion() {
 
 DIOPI_RT_API diopiError_t diopiGetTensorData(diopiTensorHandle_t th, void** pptr) {
     *pptr = (reinterpret_cast<turbomind::Tensor*>(th))->data;
-    ::cudaPointerAttributes attributes;
-    ::cudaPointerGetAttributes(&attributes, *pptr);
-    if (attributes.type == ::cudaMemoryTypeDevice) {
-        printf("The pointer is pointing to device memory.\n");
-    } else if (attributes.type == ::cudaMemoryTypeHost) {
-        printf("The pointer is pointing to host memory.\n");
-    } else {
-        printf("The pointer is not valid.\n");
-    }
+    // ::cudaPointerAttributes attributes;
+    // ::cudaPointerGetAttributes(&attributes, *pptr);
+    // if (attributes.type == ::cudaMemoryTypeDevice) {
+    //     printf("The pointer is pointing to device memory.\n");
+    // } else if (attributes.type == ::cudaMemoryTypeHost) {
+    //     printf("The pointer is pointing to host memory.\n");
+    // } else {
+    //     printf("The pointer is not valid.\n");
+    // }
     return diopiSuccess;
 }
 
@@ -132,6 +132,7 @@ DIOPI_RT_API diopiError_t diopiRequireTensor(
         dipu::devapis::mallocDevice(&_data, size_t(numel) * turbomind::Tensor::getTypeSize(data_type));
     } else {
         dipu::devapis::mallocHost(&_data, size_t(numel) * turbomind::Tensor::getTypeSize(data_type));
+        mem_type = turbomind::MemoryType::MEMORY_CPU_PINNED;
     }
     turbomind::Tensor t{mem_type, data_type, _shape, _data, pre_allocated};
     ctx->arrays.emplace_back(std::move(t));
