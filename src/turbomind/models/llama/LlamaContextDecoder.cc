@@ -335,7 +335,7 @@ void LlamaContextDecoder<T>::forward(std::unordered_map<std::string, Tensor>*   
                         int64_t(max_q_len), int64_t(max_kv_len), rotray_embedding_dim, rotary_embedding_base);
         std::cout<<"workspace_size:"<<workspace_size<<std::endl;
         std::cout<<"pre_work_size:"<<pre_work_size<<std::endl;
-        workspace_ = allocator_->reMalloc(workspace_, workspace_size);
+        workspace_ = allocator_->reMalloc(workspace_, workspace_size, false);
         diopiTensorHandle_t workspace;
         shape[0] = workspace_size;
         newshape.len = 1;

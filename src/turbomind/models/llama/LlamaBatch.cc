@@ -14,6 +14,9 @@
 #include <sstream>
 #include <unordered_map>
 
+#include <chrono>
+#include <thread>
+
 namespace turbomind {
 
 template<typename T>
@@ -361,8 +364,9 @@ void LlamaBatch<T>::initializeSampling(int infer_request_count)
                     auto& src = requests_[i]->inputs[rank_].at(param.first);
                     FT_CHECK(ref.shape == src.shape);
                     if (param.first == "stop_words_list" || param.first == "bad_words_list") {
-                        check_cuda_error(dipu::devapis::memCopyH2DAsync(stream_, size_in_bytes, (uint8_t*)param.second + size_in_bytes * i,
-                                                     src.getPtr<void>()));
+                        auto device_id = dipu::devapis::current_device();
+                        check_cuda_error(dipu::devapis::memCopyD2DAsync(stream_, size_in_bytes, device_id, (uint8_t*)param.second + size_in_bytes * i,
+                                                     device_id, src.getPtr<void>()));
                     } else {
                         memcpy((uint8_t*)param.second + size_in_bytes * i, src.getPtr<void>(), size_in_bytes);
                     }
@@ -536,12 +540,12 @@ bool LlamaBatch<T>::generate()
                            0,
                            session_len_,
                            batch_size_);
-
+    // std::this_thread::sleep_for(std::chrono::hours(10000));
     llama_->postDecodeEmbedding(logits_buf_,  //
                                 local_logits_buf_,
                                 decoder_output_buf_,
                                 batch_size_);
-
+    std::this_thread::sleep_for(std::chrono::hours(10000));
     // stop-words & bad-words require the matched tokens to be contiguous, so item size > 1 is
     // not supported yet.
     bool should_stop{};
@@ -664,6 +668,7 @@ void LlamaBatch<T>::initialize(const std::vector<std::shared_ptr<Request>>& infe
     const int count = batch_size_ + infer_requests.size();
 
     std::vector<int> tmp_input_len(count);
+    auto device_id = dipu::devapis::current_device();
 
     for (int i = batch_size_; i < count; ++i) {
         const auto& seq = cached_seq_[i];
@@ -698,7 +703,7 @@ void LlamaBatch<T>::initialize(const std::vector<std::shared_ptr<Request>>& infe
             //                                  sizeof(int) * h_input_length_buf_[i],
             //                                  cudaMemcpyDefault,
             //                                  stream_));
-            check_cuda_error(dipu::devapis::memCopyH2DAsync(stream_, sizeof(int32_t) * h_input_length_buf_[i], output_ids_ptr, input_ids_ptr));
+            check_cuda_error(dipu::devapis::memCopyD2DAsync(stream_, sizeof(int32_t) * h_input_length_buf_[i], device_id, output_ids_ptr, device_id, input_ids_ptr));
         }
 
         if (!requests_[i]->start_flag && !seq.random_state_.empty()) {
@@ -739,7 +744,7 @@ void LlamaBatch<T>::initialize(const std::vector<std::shared_ptr<Request>>& infe
         //                                  sizeof(int) * h_input_length_buf_[i],
         //                                  cudaMemcpyDefault,
         //                                  stream_));
-        check_cuda_error(dipu::devapis::memCopyH2DAsync(stream_, sizeof(int32_t) * h_input_length_buf_[i], input_ids_buf, input_ids.getPtr<int32_t>())); // SH check device
+        check_cuda_error(dipu::devapis::memCopyD2DAsync(stream_, sizeof(int32_t) * h_input_length_buf_[i], device_id, input_ids_buf, device_id, input_ids.getPtr<int32_t>())); // SH check device
         h_input_length_buf_[i] += missed;
         h_history_length_buf_[i] = seq.cache_len;
         h_context_length_buf_[i] = h_input_length_buf_[i] + h_history_length_buf_[i];

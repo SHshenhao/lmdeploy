@@ -359,15 +359,17 @@ void LlamaV2<T>::postDecodeEmbedding(float* logits, float* local_logits, const T
         diopiConstTensorHandle_t diopi_decoder_output = dipu::diopi_helper::toDiopiTensorHandle(decoder_output_tensor);
         diopiTensorHandle_t diopi_embedding_table = dipu::diopi_helper::toDiopiTensorHandle(embedding_table);
         diopiTensorHandle_t diopi_embedding_table_fp32;
-        std::vector<int64_t> shape{hidden_units_, vocab_size_};
+        std::vector<int64_t> shape{vocab_size_, hidden_units_};
         diopiSize_t newshape{shape.data(), 2};
         if (dtype == TYPE_FP32) {
             diopi_embedding_table_fp32 = diopi_embedding_table;
         } else {
             diopiRequireTensor(&ctx_, &diopi_embedding_table_fp32, &newshape, nullptr, diopiDtype_t::diopi_dtype_float32, diopiDevice_t::diopi_device);
+            diopiCastDtype(&ctx_, diopi_embedding_table_fp32, diopi_embedding_table);
         }
         diopiTensorHandle_t diopi_logits = dipu::diopi_helper::toDiopiTensorHandle(logits_tensor);
         diopiTensorHandle_t diopi_embedding_table_temp;
+        shape = {hidden_units_, vocab_size_};
         diopiRequireTensor(&ctx_, &diopi_embedding_table_temp, &newshape, nullptr, diopiDtype_t::diopi_dtype_float32, diopiDevice_t::diopi_device);
         diopiTranspose(&ctx_, diopi_embedding_table_temp, diopi_embedding_table_fp32, 1, 0); 
         diopiMm(&ctx_, diopi_logits, diopi_decoder_output, diopi_embedding_table_temp);
