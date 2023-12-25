@@ -398,7 +398,17 @@ void LlamaBatch<T>::initializeSampling(int infer_request_count)
         }
     }
 
-    handleOptArg(&inputs_, "end_id", end_ids_buf_, llama_->end_id_, batch_size_);
+    // handleOptArg(&inputs_, "end_id", end_ids_buf_, llama_->end_id_, batch_size_);
+    if (inputs_.isExist("end_id")) {
+        FT_CHECK(inputs_.at("end_id").size() == batch_size_);
+        dipu::devapis::memCopyH2D(sizeof(int32_t) * batch_size_, end_ids_buf_, inputs_.at("end_id").getPtr<const int32_t>());
+    } else {
+        turbomind::Tensor end_ids_buf_tensor{MEMORY_GPU, TYPE_INT32, {batch_size_}, end_ids_buf_};
+        diopiTensorHandle_t diopi_end_ids_buf = dipu::diopi_helper::toDiopiTensorHandle(end_ids_buf_tensor);
+        diopiScalar_t scalardefault{diopiDtype_t::diopi_dtype_float64, double(llama_->end_id_)};
+        diopiFill(&ctx_, diopi_end_ids_buf, &scalardefault);
+        sync_check_cuda_error();
+    }
     // cudaStreamSynchronize(0);
     dipu::devapis::syncDevice();
 }
@@ -1126,8 +1136,9 @@ void LlamaBatch<T>::setOutputTensors(int max_gen_step)
             //                                  stream_));
             // check_cuda_error(cudaMemcpyAsync(
             //     sequence_length.getPtr<int>(), sequence_lengths_ + i, sizeof(int), cudaMemcpyDefault, stream_));
-            check_cuda_error(dipu::devapis::memCopyD2HAsync(stream_, sizeof(int32_t) * output_ids.shape.at(2), output_ids.getPtr<int32_t>(), output_ids_buf_ + i * session_len_));
-            check_cuda_error(dipu::devapis::memCopyD2HAsync(stream_, sizeof(int32_t), sequence_length.getPtr<int>(), sequence_lengths_ + i));
+            auto device_id = dipu::devapis::current_device();
+            check_cuda_error(dipu::devapis::memCopyD2DAsync(stream_, sizeof(int32_t) * output_ids.shape.at(2), device_id, output_ids.getPtr<int32_t>(), device_id, output_ids_buf_ + i * session_len_));
+            check_cuda_error(dipu::devapis::memCopyD2DAsync(stream_, sizeof(int32_t), device_id, sequence_length.getPtr<int32_t>(), device_id, sequence_lengths_ + i));
             if (max_gen_step > max_context_len_) {  // +1 for newly generated token
                 // invokePlusScalar(sequence_length.getPtr<int>(), 1, 1, stream_); // SH check
                 turbomind::Tensor plusscalar_inout{MEMORY_GPU, TYPE_INT32, {1}, sequence_length.getPtr<int32_t>()};
