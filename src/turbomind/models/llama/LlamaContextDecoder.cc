@@ -252,14 +252,14 @@ void LlamaContextDecoder<T>::forward(std::unordered_map<std::string, Tensor>*   
     float rotary_embedding_base{attn_params_.rotary_embedding_base};
     int64_t rotray_embedding_dim{attn_params_.rotray_embedding_dim};
 
-    turbomind::Tensor inout_tensor = output_tensors->at("decoder_output");
-    diopiTensorHandle_t inout = dipu::diopi_helper::toDiopiTensorHandle(inout_tensor);
+    turbomind::Tensor decoder_output_tensor = output_tensors->at("decoder_output");
+    diopiTensorHandle_t diopi_decoder_output_tensor = dipu::diopi_helper::toDiopiTensorHandle(decoder_output_tensor);
     diopiDevice_t device;
-    diopiGetTensorDevice(inout, &device);
+    diopiGetTensorDevice(diopi_decoder_output_tensor, &device);
     diopiDtype_t dtype;
-    diopiGetTensorDtype(inout, &dtype);
+    diopiGetTensorDtype(diopi_decoder_output_tensor, &dtype);
     int64_t itemsize;
-    diopiGetTensorElemSize(inout, &itemsize);
+    diopiGetTensorElemSize(diopi_decoder_output_tensor, &itemsize);
     int64_t h_kcache_data[batch_size];
     int64_t h_vcache_data[batch_size];
     turbomind::Tensor h_kcache_tensor{MEMORY_CPU, TYPE_INT64, {batch_size}, reinterpret_cast<void*>(h_kcache_data)};
@@ -300,18 +300,18 @@ void LlamaContextDecoder<T>::forward(std::unordered_map<std::string, Tensor>*   
     //                          sess.token_num,
     //                          hidden_units_,
     //                          stream_);
-    turbomind::Tensor input_output_tensor = input_tensors->at("decoder_input");
-    diopiTensorHandle_t diopi_input_output = dipu::diopi_helper::toDiopiTensorHandle(input_output_tensor);
-    // diopiLmdeployCopyD2D(&ctx_, inout, diopi_input_output, false); // SH RMSNorm
+    turbomind::Tensor decoder_input_tensor = input_tensors->at("decoder_input");
+    diopiTensorHandle_t diopi_decoder_input_tensor = dipu::diopi_helper::toDiopiTensorHandle(decoder_input_tensor);
+    // diopiLmdeployCopyD2D(&ctx_, diopi_decoder_output_tensor, diopi_decoder_input_tensor, false); // SH RMSNorm
     diopiSize_t rms_input_shape;
-    diopiGetTensorShape(diopi_input_output, &rms_input_shape);
+    diopiGetTensorShape(diopi_decoder_input_tensor, &rms_input_shape);
     diopiTensorHandle_t invRMS;
     diopiRequireTensor(&ctx_, &invRMS, &rms_input_shape, nullptr, dtype, device);
     turbomind::Tensor rms_weights{MEMORY_GPU, data_type_, {hidden_units_}, decoder_layer_weights->at(0)->self_attn_norm_weights};
     diopiTensorHandle_t diopi_rms_weights = dipu::diopi_helper::toDiopiTensorHandle(rms_weights);
     int64_t hidden_units_iny64_t = static_cast<int64_t>(hidden_units_);
     diopiSize_t normalized_shape{&hidden_units_iny64_t, 1};
-    diopiRMSNorm(&ctx_, inout, invRMS, diopi_input_output, normalized_shape, diopi_rms_weights, nullptr, rmsnorm_eps_);
+    diopiRMSNorm(&ctx_, diopi_decoder_output_tensor, invRMS, diopi_decoder_input_tensor, normalized_shape, diopi_rms_weights, nullptr, rmsnorm_eps_);
     sync_check_cuda_error();
 
     const turbomind::Tensor& input_lengths_tensor = input_tensors->at("input_lengths");
@@ -323,6 +323,11 @@ void LlamaContextDecoder<T>::forward(std::unordered_map<std::string, Tensor>*   
     const turbomind::Tensor& context_lengths_tensor = input_tensors->at("context_lengths");
     diopiConstTensorHandle_t context_lengths = dipu::diopi_helper::toDiopiTensorHandle(context_lengths_tensor);
     // context_lengths_tensor.saveNpy(contextlengths0_path);
+
+    diopiSize_t decoder_input_tensor_shape;
+    diopiGetTensorShape(&ctx_, diopi_decoder_input_tensor, &decoder_input_tensor_shape);
+    diopiTensorHandle_t diopi_decoder_tmp_tensor;
+    diopiRequireTensor(&ctx_, &diopi_decoder_tmp_tensor, &decoder_input_tensor_shape, nullptr, dtype, device);
 
     for (size_t layer = 0; layer < num_layer_; ++layer) {
         /////////////////////////////////////////////
@@ -338,7 +343,7 @@ void LlamaContextDecoder<T>::forward(std::unordered_map<std::string, Tensor>*   
 
         int64_t workspace_size = -1;
         int64_t pre_work_size = -1;
-        diopiFusedContextAttentionInp(&ctx_, inout, weightqkv, weightbias, attention_mask, &pre_work_size, true, nullptr, &workspace_size, 0,
+        diopiFusedContextAttentionInp(&ctx_, diopi_decoder_output_tensor, weightqkv, weightbias, attention_mask, &pre_work_size, true, nullptr, &workspace_size, 0,
                         key_cache, value_cache, input_lengths, history_lengths, context_lengths,
                         int64_t(layer), int64_t(local_head_num), int64_t(local_kv_head_num), int64_t(size_per_head), int64_t(max_seq_len),
                         int64_t(max_q_len), int64_t(max_kv_len), rotray_embedding_dim, rotary_embedding_base);
@@ -353,17 +358,17 @@ void LlamaContextDecoder<T>::forward(std::unordered_map<std::string, Tensor>*   
         // void* temp_ptr;
         // diopiGetTensorData(workspace, &temp_ptr);
         std::cout<<"-diopiFusedContextAttentionInp-"<<device<<std::endl;
-        diopiFusedContextAttentionInp(&ctx_, inout, weightqkv, weightbias, attention_mask, &pre_work_size, false, workspace, &workspace_size, 0,
+        diopiFusedContextAttentionInp(&ctx_, diopi_decoder_output_tensor, weightqkv, weightbias, attention_mask, &pre_work_size, false, workspace, &workspace_size, 0,
                         key_cache, value_cache, input_lengths, history_lengths, context_lengths,
                         int64_t(layer), int64_t(local_head_num), int64_t(local_kv_head_num), int64_t(size_per_head), int64_t(max_seq_len),
                         int64_t(max_q_len), int64_t(max_kv_len), rotray_embedding_dim, rotary_embedding_base);
-        diopiFusedContextAttentionInp(&ctx_, inout, weightqkv, weightbias, attention_mask, &pre_work_size, true, workspace, &workspace_size, 0,
+        diopiFusedContextAttentionInp(&ctx_, diopi_decoder_output_tensor, weightqkv, weightbias, attention_mask, &pre_work_size, true, workspace, &workspace_size, 0,
                         key_cache, value_cache, input_lengths, history_lengths, context_lengths,
                         int64_t(layer), int64_t(local_head_num), int64_t(local_kv_head_num), int64_t(size_per_head), int64_t(max_seq_len),
                         int64_t(max_q_len), int64_t(max_kv_len), rotray_embedding_dim, rotary_embedding_base);
         turbomind::Tensor weightoutput_tensor{MEMORY_GPU, data_type_, {int64_t(hidden_units_), int64_t(hidden_units_)}, sess.weights->at(layer)->self_attn_weights.output.kernel};
         diopiTensorHandle_t weightoutput = dipu::diopi_helper::toDiopiTensorHandle(weightoutput_tensor);
-        diopiMm(&ctx_, diopi_input_output, inout, weightoutput);
+        diopiMm(&ctx_, diopi_decoder_tmp_tensor, diopi_decoder_output_tensor, weightoutput);
 
         // invokeFusedAddBiasResidualRMSNorm(decoder_input_output,
         //                                   decoder_output,
@@ -373,18 +378,18 @@ void LlamaContextDecoder<T>::forward(std::unordered_map<std::string, Tensor>*   
         //                                   sess.token_num,
         //                                   hidden_units_,
         //                                   stream_);
-        // diopiLmdeployCopyD2D(&ctx_, inout, diopi_input_output, false); // SH RMSNorm
+        // diopiLmdeployCopyD2D(&ctx_, diopi_decoder_output_tensor, diopi_decoder_tmp_tensor, false); // SH RMSNorm
 
         turbomind::Tensor rms_attn_bias{MEMORY_GPU, data_type_, {1, hidden_units_}, decoder_layer_weights->at(layer)->self_attn_weights.output.bias};
         diopiTensorHandle_t diopi_rms_attn_bias = dipu::diopi_helper::toDiopiTensorHandle(rms_attn_bias);
         diopiScalar_t tmp_one;
         tmp_one.stype = diopiDtype_t::diopi_dtype_uint64;
         tmp_one.ival = 1;
-        diopiAddInp(&ctx_, diopi_input_output, inout, &tmp_one);
-        diopiAddInp(&ctx_, diopi_input_output, diopi_rms_attn_bias, &tmp_one);
+        diopiAddInp(&ctx_, diopi_decoder_input_tensor, diopi_decoder_tmp_tensor, &tmp_one);
+        diopiAddInp(&ctx_, diopi_decoder_input_tensor, diopi_rms_attn_bias, &tmp_one);
         turbomind::Tensor rms_attn_weights{MEMORY_GPU, data_type_, {hidden_units_}, decoder_layer_weights->at(layer)->ffn_norm_weights};
         diopiTensorHandle_t diopi_rms_attn_weights = dipu::diopi_helper::toDiopiTensorHandle(rms_attn_weights);
-        diopiRMSNorm(&ctx_, inout, invRMS, diopi_input_output, normalized_shape, diopi_rms_attn_weights, nullptr, rmsnorm_eps_);
+        diopiRMSNorm(&ctx_, diopi_decoder_output_tensor, invRMS, diopi_decoder_input_tensor, normalized_shape, diopi_rms_attn_weights, nullptr, rmsnorm_eps_);
         sync_check_cuda_error();
 
         ////////////////////////////////////////////
@@ -399,7 +404,7 @@ void LlamaContextDecoder<T>::forward(std::unordered_map<std::string, Tensor>*   
         diopiTensorHandle_t weight3 = dipu::diopi_helper::toDiopiTensorHandle(weight3_tensor);
         turbomind::Tensor weight2_tensor{MEMORY_GPU, data_type_, {int64_t(inter_size_), int64_t(hidden_units_)}, decoder_layer_weights->at(layer)->ffn_weights.output.kernel};
         diopiTensorHandle_t weight2 = dipu::diopi_helper::toDiopiTensorHandle(weight2_tensor);
-        diopiFusedSiluFfnInp(&ctx_, inout, weight1, weight2, weight3, workspace, &workspace_size, 0);
+        diopiFusedSiluFfnInp(&ctx_, diopi_decoder_output_tensor, weight1, weight2, weight3, workspace, &workspace_size, 0);
 
         auto scale_weight = layer < num_layer_ - 1 ? decoder_layer_weights->at(layer + 1)->self_attn_norm_weights :
                                                      input_tensors->at("output_norm_weight").getPtr<T>();
@@ -411,14 +416,14 @@ void LlamaContextDecoder<T>::forward(std::unordered_map<std::string, Tensor>*   
         //                                   sess.token_num,
         //                                   hidden_units_,
         //                                   stream_);
-        // diopiLmdeployCopyD2D(&ctx_, diopi_input_output, inout, false); // SH RMSNorm
+        // diopiLmdeployCopyD2D(&ctx_, diopi_decoder_input_tensor, diopi_decoder_output_tensor, false); // SH RMSNorm
         turbomind::Tensor rms_ffn_bias{MEMORY_GPU, data_type_, {1, hidden_units_}, decoder_layer_weights->at(layer)->ffn_weights.output.bias};
         diopiTensorHandle_t diopi_rms_ffn_bias = dipu::diopi_helper::toDiopiTensorHandle(rms_ffn_bias);
-        diopiAddInp(&ctx_, diopi_input_output, inout, &tmp_one);
-        diopiAddInp(&ctx_, diopi_input_output, diopi_rms_ffn_bias, &tmp_one);
+        diopiAddInp(&ctx_, diopi_decoder_input_tensor, diopi_decoder_output_tensor, &tmp_one);
+        diopiAddInp(&ctx_, diopi_decoder_input_tensor, diopi_rms_ffn_bias, &tmp_one);
         turbomind::Tensor rms_ffn_weights{MEMORY_GPU, data_type_, {hidden_units_}, scale_weight};
         diopiTensorHandle_t diopi_rms_ffn_weights = dipu::diopi_helper::toDiopiTensorHandle(rms_ffn_weights);
-        diopiRMSNorm(&ctx_, inout, invRMS, diopi_input_output, normalized_shape, diopi_rms_ffn_weights, nullptr, rmsnorm_eps_);
+        diopiRMSNorm(&ctx_, diopi_decoder_output_tensor, invRMS, diopi_decoder_input_tensor, normalized_shape, diopi_rms_ffn_weights, nullptr, rmsnorm_eps_);
         sync_check_cuda_error();
     }
 
