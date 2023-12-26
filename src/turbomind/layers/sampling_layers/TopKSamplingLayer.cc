@@ -116,6 +116,7 @@ void TopKSamplingLayer<T>::setup(const size_t batch_size, const size_t beam_widt
             fmtstr("runtime_top_p.size() (%d) == batch_size (%d) is not satisfied!", runtime_top_p.size(), batch_size));
         dipu::devapis::memCopyH2DAsync(stream_, sizeof(float) * batch_size, runtime_top_p_buf_, runtime_top_p.getPtr<float>());
     }
+    sync_check_cuda_error();
 
     // dim3 block(std::min((int)batch_size, 256));
     // dim3 grid(div_up((int)batch_size, (int)block.x));
