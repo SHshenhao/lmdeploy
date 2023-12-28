@@ -99,6 +99,7 @@ void deviceFill(T* devptr, size_t size, T value, dipu::deviceStream_t stream)
     T* arr = new T[size];
     std::fill(arr, arr + size, value);
     check_cuda_error(dipu::devapis::memCopyH2DAsync(stream, sizeof(T) * size, devptr, arr));
+    dipu::devapis::syncStream(stream);
     delete[] arr;
 }
 

@@ -23,4 +23,4 @@ set_property(TARGET DynamicDecodeLayer PROPERTY POSITION_INDEPENDENT_CODE  ON)
 # target_link_libraries(DynamicDecodeLayer PUBLIC CUDA::cudart TopKSamplingLayer
 #         TopPSamplingLayer ban_bad_words stop_criteria gpt_kernels tensor nvtx_utils runtime)
 target_link_libraries(DynamicDecodeLayer PUBLIC TopKSamplingLayer
-        TopPSamplingLayer tensor nvtx_utils runtime)
+        TopPSamplingLayer tensor nvtx_utils dipu_rt)

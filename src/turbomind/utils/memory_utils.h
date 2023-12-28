@@ -32,7 +32,7 @@ template<typename T>
 void deviceFree(T*& ptr);
 
 template<typename T>
-void deviceFill(T* devptr, size_t size, T value, dipu::deviceStream_t stream = 0);
+void deviceFill(T* devptr, size_t size, T value, dipu::deviceStream_t stream);
 
 template<typename T>
 void cudaD2Hcpy(T* tgt, const T* src, const size_t size);

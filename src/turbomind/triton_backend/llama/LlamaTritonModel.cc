@@ -175,6 +175,7 @@ LlamaTritonModel<T>::LlamaTritonModel(size_t      tensor_para_size,
         std::cout << "[ERROR] Unsupported weight type: '" << weight_type_str << "'\n";
         ft::FT_CHECK(0);
     }
+    dipu::devapis::syncDevice();
 }
 
 template<typename T>

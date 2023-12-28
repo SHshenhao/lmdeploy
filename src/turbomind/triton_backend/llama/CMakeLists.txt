@@ -27,5 +27,5 @@ set(llama_triton_backend_files
 # find_package(CUDAToolkit REQUIRED)
 add_library(LlamaTritonBackend STATIC ${llama_triton_backend_files})
 set_property(TARGET LlamaTritonBackend PROPERTY POSITION_INDEPENDENT_CODE  ON)
-target_link_libraries(LlamaTritonBackend PUBLIC TransformerTritonBackend Llama tensor memory_utils runtime)
+target_link_libraries(LlamaTritonBackend PUBLIC TransformerTritonBackend Llama tensor memory_utils dipu_rt)
 target_compile_features(LlamaTritonBackend PRIVATE cxx_std_14)

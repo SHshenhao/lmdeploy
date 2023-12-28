@@ -230,7 +230,7 @@ void TopKSamplingLayer<T>::runSampling(TensorMap* output_tensors, TensorMap* inp
     int64_t itemsize = sizeof(T);
     sampling_workspace_ = allocator_->reMalloc(sampling_workspace_, workspace_size, true);
     diopiSize_t workspace_stride{static_cast<const int64_t*>(reinterpret_cast<int64_t*>(sampling_workspace_)), -1};
-    diopiRequireTensor(&ctx_, &workspace, &newshape, &workspace_stride, dtype, diopiDevice_t::diopi_device);
+    diopiRequireTensor(&ctx_, &workspace, &newshape, &workspace_stride, diopiDtype_t::diopi_dtype_int8, diopiDevice_t::diopi_device);
     // void* temp_ptr;
     // diopiGetTensorData(workspace, &temp_ptr);
     // std::cout<<"++diopiTopKSampling++"<<workspace_size<<std::endl;

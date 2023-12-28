@@ -197,14 +197,43 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 if ("${IMPL_OPT}" STREQUAL "cuda")
     set(CUDA_PATH "/usr/lib/cuda")
+    set(COMMON_HEADER_DIRS
+      ${PROJECT_SOURCE_DIR}
+      ${CMAKE_SOURCE_DIR}/3rdparty/DIOPI/proto/include
+      ${CUDA_PATH}/include
+      # ${CUTLASS_HEADER_DIR}
+    )
 endif()
 
-set(COMMON_HEADER_DIRS
-  ${PROJECT_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/3rdparty/DIOPI/proto/include
-  ${CUDA_PATH}/include
-  # ${CUTLASS_HEADER_DIR}
-)
+if ("${IMPL_OPT}" STREQUAL "ascend")
+    if(DEFINED ENV{ASCEND_CUSTOM_PATH})
+      set(ASCEND_DIR $ENV{ASCEND_CUSTOM_PATH})
+    else()
+      set(ASCEND_DIR /usr/local/Ascend)
+    endif()
+
+    if(EXISTS ${ASCEND_DIR}/ascend-toolkit/latest/)
+      message(STATUS "ascend-toolkit exists:" ${ASCEND_DIR}/ascend-toolkit/latest/)
+      message(STATUS "ASCEND_DIR:" ${ASCEND_DIR})
+      include_directories(${ASCEND_DIR}/ascend-toolkit/latest/include/)
+      link_directories(${ASCEND_DIR}/ascend-toolkit/latest/lib64)
+    else()
+      message(FATAL_ERROR "No ascend-toolkit found.")
+    endif()
+
+    set(COMMON_HEADER_DIRS
+      ${PROJECT_SOURCE_DIR}
+      ${CMAKE_SOURCE_DIR}/3rdparty/DIOPI/proto/include
+      ${ASCEND_TOOLKIT_ROOT}/include
+    )
+endif()
+
+# set(COMMON_HEADER_DIRS
+#   ${PROJECT_SOURCE_DIR}
+#   ${CMAKE_SOURCE_DIR}/3rdparty/DIOPI/proto/include
+#   ${CUDA_PATH}/include
+#   # ${CUTLASS_HEADER_DIR}
+# )
 message("-- COMMON_HEADER_DIRS: ${COMMON_HEADER_DIRS}")
 
 set(COMMON_LIB_DIRS
@@ -318,7 +347,7 @@ endif()
 # include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/3rdparty/DIOPI/proto/include")
 
 add_library(transformer-shared SHARED
-  $<TARGET_OBJECTS:runtime>
+  $<TARGET_OBJECTS:dipu_rt>
   $<TARGET_OBJECTS:BaseSamplingLayer>
   $<TARGET_OBJECTS:DynamicDecodeLayer>
   # $<TARGET_OBJECTS:llama_fmha>

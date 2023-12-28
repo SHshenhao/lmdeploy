@@ -11,7 +11,26 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-include_directories("/usr/local/cuda/include")
+if ("${IMPL_OPT}" STREQUAL "cuda")
+  include_directories("/usr/local/cuda/include")
+endif()
+if ("${IMPL_OPT}" STREQUAL "ascend")
+  if(DEFINED ENV{ASCEND_CUSTOM_PATH})
+    set(ASCEND_DIR $ENV{ASCEND_CUSTOM_PATH})
+  else()
+    set(ASCEND_DIR /usr/local/Ascend)
+  endif()
+
+  if(EXISTS ${ASCEND_DIR}/ascend-toolkit/latest/)
+    message(STATUS "ascend-toolkit exists:" ${ASCEND_DIR}/ascend-toolkit/latest/)
+    message(STATUS "ASCEND_DIR:" ${ASCEND_DIR})
+    include_directories(${ASCEND_DIR}/ascend-toolkit/latest/include/)
+  #   link_directories(${ASCEND_DIR}/ascend-toolkit/latest/lib64)
+  else()
+      message(FATAL_ERROR "No ascend-toolkit found.")
+  endif()
+endif()
+
 add_subdirectory(runtime)
 add_subdirectory(utils)
 # add_subdirectory(kernels)

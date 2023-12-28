@@ -307,23 +307,23 @@ struct AbstractTransformerModel {
     createNcclParams(const int node_id, const int device_id_start = 0, const bool multi_node = false);
 
     virtual void createCustomComms(std::vector<std::shared_ptr<ft::AbstractCustomComm>>* custom_all_reduce_comms,
-                                   int                                                   world_size) = 0;
+                                   int32_t                                                   world_size) = 0;
 
-    virtual std::unique_ptr<ft::AbstractInstanceComm> createInstanceComm(int size)
+    virtual std::unique_ptr<ft::AbstractInstanceComm> createInstanceComm(int32_t size)
     {
         return nullptr;
     }
 
     virtual std::unique_ptr<AbstractTransformerModelInstance>
-    createModelInstance(int                                                               deviceId,
-                        int                                                               rank,
-                        dipu::deviceStream_t                                                      stream,
+    createModelInstance(int32_t                                                               deviceId,
+                        int32_t                                                               rank,
+                        dipu::deviceStream_t                                                  stream,
                         std::pair<std::vector<ft::NcclParam>, std::vector<ft::NcclParam>> nccl_params,
                         std::shared_ptr<ft::AbstractCustomComm> custom_all_reduce_comm = nullptr) = 0;
 
-    virtual void createSharedWeights(int deviceId, int rank) = 0;
+    virtual void createSharedWeights(int32_t deviceId, int32_t rank) = 0;
 
     virtual std::string toString()            = 0;
-    virtual int         getTensorParaSize()   = 0;
-    virtual int         getPipelineParaSize() = 0;
+    virtual int32_t         getTensorParaSize()   = 0;
+    virtual int32_t         getPipelineParaSize() = 0;
 };

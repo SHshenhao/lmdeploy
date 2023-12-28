@@ -46,7 +46,7 @@ public:
     void allocatePersistantBuffer(size_t max_batch_size);
     void freeBuffer();
 
-    void initializeSampling(int infer_request_count);
+    void initializeSampling(int32_t infer_request_count);
 
     void initialize(const std::vector<std::shared_ptr<Request>>& infer_requests);
     void contextDecode();
@@ -55,16 +55,16 @@ public:
     bool generate();
 
     void finish();
-    void finishRequest(int index, bool force_end);
+    void finishRequest(int32_t index, bool force_end);
 
     void synchronize();
 
-    void setOutputTensors(int max_gen_step);
+    void setOutputTensors(int32_t max_gen_step);
 
     void
-    outputContextLogits(T* context_decoder_output, const std::vector<int>& indices, const std::vector<int>& lengths);
+    outputContextLogits(T* context_decoder_output, const std::vector<int32_t>& indices, const std::vector<int32_t>& lengths);
 
-    explicit LlamaBatch(int max_batch_size, int max_context_token_num, int session_len, LlamaV2<T>* llama);
+    explicit LlamaBatch(int32_t max_batch_size, int32_t max_context_token_num, int32_t session_len, LlamaV2<T>* llama);
 
     ~LlamaBatch()
     {

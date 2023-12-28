@@ -351,7 +351,7 @@ void LlamaV2<T>::postDecodeEmbedding(float* logits, float* local_logits, const T
         //                       vocab_size_,  // n
         //                       CUDA_R_32F,
         //                       cublasGemmAlgo_t(-1));
-        int64_t num{ctx_.arrays.size()};
+        // int64_t num{ctx_.arrays.size()};
         turbomind::DataType dtype = turbomind::getTensorType<T>();
         turbomind::Tensor decoder_output_tensor {MEMORY_GPU, dtype, {batch_size, hidden_units_}, decoder_output};
         turbomind::Tensor embedding_table{MEMORY_GPU, dtype, {vocab_size_, hidden_units_}, weights_->post_decoder_embedding_kernel}; 
@@ -378,7 +378,7 @@ void LlamaV2<T>::postDecodeEmbedding(float* logits, float* local_logits, const T
         diopiRequireTensor(&ctx_, &diopi_embedding_table_temp, &newshape, nullptr, diopiDtype_t::diopi_dtype_float32, diopiDevice_t::diopi_device);
         diopiTranspose(&ctx_, diopi_embedding_table_temp, diopi_embedding_table_fp32, 1, 0); 
         diopiMm(&ctx_, diopi_logits, diopi_decoder_output_fp32, diopi_embedding_table_temp);
-        dipu::diopi_helper::clearDiopiContextAfterN(ctx_, num);
+        // dipu::diopi_helper::clearDiopiContextAfterN(ctx_, num);
     }
     else {
         // FT_CHECK(vocab_size_padded_ % tensor_para_.world_size_ == 0);
@@ -436,7 +436,7 @@ void LlamaV2<T>::dynamicDecode(int32_t*            token_ids,
                                size_t          batch_size)
 {
     TM_LOG_DEBUG(__PRETTY_FUNCTION__);
-    int local_batch_size = (int)batch_size;
+    int32_t local_batch_size = (int32_t)batch_size;
 
     std::unordered_map<std::string, Tensor> dynamic_decode_input_tensors{
         {"logits", {MEMORY_GPU, TYPE_FP32, {batch_size, (size_t)1, vocab_size_padded_}, logits}},

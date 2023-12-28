@@ -36,14 +36,14 @@ set(SOURCE_FILES
     ${VENDOR_FILES}
 )
 
-add_library(runtime SHARED ${SOURCE_FILES})
-set_property(TARGET runtime PROPERTY POSITION_INDEPENDENT_CODE  ON)
+add_library(dipu_rt SHARED ${SOURCE_FILES})
+set_property(TARGET dipu_rt PROPERTY POSITION_INDEPENDENT_CODE  ON)
 if ("${UsedVendor}" STREQUAL "cuda")
-    set_property(TARGET runtime PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
+    set_property(TARGET dipu_rt PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
 endif()
 
 # link
-target_link_libraries(runtime ${DIPU_VENDOR_LIB})
+target_link_libraries(dipu_rt ${DIPU_VENDOR_LIB})
 
 # diopi
 if (EXISTS $ENV{DIOPI_PATH})
@@ -61,8 +61,9 @@ message(STATUS "PROJECT_SOURCE_DIR:  ${PROJECT_SOURCE_DIR}")
 
 set(DIOPI_IMPL_LIB ${PROJECT_SOURCE_DIR}/3rdparty/DIOPI/impl/lib/libdiopi_impl.so)
 
+message(STATUS "DIOPI_IMPL_LIB:  ${DIOPI_IMPL_LIB}")
 # need export LIBRARY_PATH=$DIOPI_ROOT:$LIBRARY_PATH;
-target_link_libraries(runtime  -Wl,--no-as-needed ${DIOPI_IMPL_LIB} -Wl,--as-needed)
+target_link_libraries(dipu_rt  -Wl,--no-as-needed ${DIOPI_IMPL_LIB} -Wl,--as-needed)
 
 ## copy vendor header file
 set(VENDOR_DIST "${DIPU_PATH}/vendor/")
@@ -75,4 +76,4 @@ add_custom_command(
   COMMAND cmake -E create_symlink ${VENDOR_HEADER_DIR}/vendorapi.h
           ${VENDOR_DIST}/vendorapi.h)
 add_custom_target(copy_include DEPENDS vendor_include)
-add_dependencies(runtime copy_include)
+add_dependencies(dipu_rt copy_include)

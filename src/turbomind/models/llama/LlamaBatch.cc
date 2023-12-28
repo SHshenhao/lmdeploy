@@ -14,9 +14,6 @@
 #include <sstream>
 #include <unordered_map>
 
-#include <chrono>
-#include <thread>
-
 namespace turbomind {
 
 template<typename T>
@@ -31,7 +28,7 @@ void LlamaBatch<T>::verifyRequests(std::vector<std::shared_ptr<Request>>& stop_r
         }
     };
 
-    auto invalidate = [](const char* type, std::shared_ptr<Request>& req, int ec) {
+    auto invalidate = [](const char* type, std::shared_ptr<Request>& req, int32_t ec) {
         TM_LOG_WARNING("[verifyRequests] Skipping invalid %s request for id %ld, code = %d", type, (long)req->id, ec);
         // We don't need a barrier there because
         // this lambda is called only for new requests
@@ -44,7 +41,7 @@ void LlamaBatch<T>::verifyRequests(std::vector<std::shared_ptr<Request>>& stop_r
                                                                        const char*                            type) {
         for (auto& r : rs) {
             if (r) {
-                int ec = 0;
+                int32_t ec = 0;
 
                 if (occurrence[r->id] != 1) {
                     ec = Request::kConflict;
@@ -64,7 +61,7 @@ void LlamaBatch<T>::verifyRequests(std::vector<std::shared_ptr<Request>>& stop_r
     };
 
     auto drop_invalid = [](std::vector<std::shared_ptr<Request>>& rs) {
-        int count = 0;
+        int32_t count = 0;
         for (int i = 0; i < rs.size(); ++i) {
             if (rs[i]) {
                 rs[count++] = std::move(rs[i]);
@@ -82,7 +79,7 @@ void LlamaBatch<T>::verifyRequests(std::vector<std::shared_ptr<Request>>& stop_r
         // invalidate stop-only requests for inactive sequences
         for (auto& r : stop_reqs) {
             if (r && r->end_flag == false) {
-                int ec = Request::kInactive;
+                int32_t ec = Request::kInactive;
                 for (int i = 0; i < batch_size_; ++i) {
                     if (requests_[i] && requests_[i]->id == r->id) {
                         ec = 0;
@@ -121,7 +118,7 @@ template<typename T>
 void LlamaBatch<T>::handleStopRequests(const std::vector<std::shared_ptr<Request>>& requests)
 {
     for (const auto& r : requests) {
-        int ec = Request::kFail;
+        int32_t ec = Request::kFail;
         // find matching active sequence
         for (int i = 0; i < batch_size_; ++i) {
             // stop & optionally erase active sequence
@@ -315,7 +312,7 @@ void LlamaBatch<T>::freeBuffer()
 }
 
 template<typename T>
-LlamaBatch<T>::LlamaBatch(int max_batch_size, int max_context_token_num, int session_len, LlamaV2<T>* llama):
+LlamaBatch<T>::LlamaBatch(int32_t max_batch_size, int32_t max_context_token_num, int32_t session_len, LlamaV2<T>* llama):
     max_batch_size_(max_batch_size),
     max_context_token_num_(max_context_token_num),
     session_len_(session_len),
@@ -337,7 +334,7 @@ LlamaBatch<T>::LlamaBatch(int max_batch_size, int max_context_token_num, int ses
 }
 
 template<typename T>
-void LlamaBatch<T>::initializeSampling(int infer_request_count)
+void LlamaBatch<T>::initializeSampling(int32_t infer_request_count)
 {
     TensorMap inputs;
     for (const auto& param : sampling_params_) {
@@ -353,7 +350,7 @@ void LlamaBatch<T>::initializeSampling(int infer_request_count)
             auto        shape = ref.shape;
             FT_CHECK(shape[0] == 1);
             shape[0]                = batch_size_;
-            const int size_in_bytes = ref.sizeBytes();
+            const int32_t size_in_bytes = ref.sizeBytes();
             if (param.first == "stop_words_list" || param.first == "bad_words_list") {
                 check_cuda_error(dipu::devapis::memSetAsync(stream_, param.second, 0, size_in_bytes * batch_size_));
             } else {
@@ -407,7 +404,6 @@ void LlamaBatch<T>::initializeSampling(int infer_request_count)
         diopiTensorHandle_t diopi_end_ids_buf = dipu::diopi_helper::toDiopiTensorHandle(end_ids_buf_tensor);
         diopiScalar_t scalardefault{diopiDtype_t::diopi_dtype_float64, double(llama_->end_id_)};
         diopiFill(&ctx_, diopi_end_ids_buf, &scalardefault);
-        sync_check_cuda_error();
     }
     // cudaStreamSynchronize(0);
     dipu::devapis::syncDevice();
@@ -515,7 +511,7 @@ void LlamaBatch<T>::initializeGeneration()
 template<typename T>
 bool LlamaBatch<T>::generate()
 {
-    constexpr int kLogInterval = 10;
+    constexpr int32_t kLogInterval = 10;
     if (rank_ == 0 && (step_ - 1) % kLogInterval == 0) {
         TM_LOG_INFO("------------------------- step = %d -------------------------", step_ - 1);
     }
@@ -531,6 +527,7 @@ bool LlamaBatch<T>::generate()
         //                 cudaMemcpyDefault,
         //                 stream_);
         dipu::devapis::memCopyD2HAsync(stream_, sizeof(int32_t) * batch_size_, prev.data(), token_ids_buf_ + (step_ - 1) * batch_size_);
+        dipu::devapis::syncStream(stream_);
     }
 
     // embeddingLookup(step_ - 1);
@@ -555,7 +552,6 @@ bool LlamaBatch<T>::generate()
                                 local_logits_buf_,
                                 decoder_output_buf_,
                                 batch_size_);
-    std::this_thread::sleep_for(std::chrono::hours(10000));
     // stop-words & bad-words require the matched tokens to be contiguous, so item size > 1 is
     // not supported yet.
     bool should_stop{};
@@ -612,7 +608,7 @@ void LlamaBatch<T>::initialize(const std::vector<std::shared_ptr<Request>>& infe
 {
     FT_CHECK(batch_size_ + infer_requests.size() <= max_batch_size_);
 
-    const int infer_request_count = infer_requests.size();
+    const int32_t infer_request_count = infer_requests.size();
 
     allocateBuffer(batch_size_ + infer_request_count, session_len_);
 
@@ -621,7 +617,7 @@ void LlamaBatch<T>::initialize(const std::vector<std::shared_ptr<Request>>& infe
     std::vector<CachedSeq> tmp_cached_seq;
     tmp_cached_seq.reserve(infer_request_count);
 
-    int tmp_max_input_length = 0;
+    int32_t tmp_max_input_length = 0;
     for (int i = 0; i < infer_request_count; ++i) {
         auto& r = *infer_requests[i];
 
@@ -633,7 +629,7 @@ void LlamaBatch<T>::initialize(const std::vector<std::shared_ptr<Request>>& infe
             seq = llama_->kv_cache_mgr_->fetch(r.id, stream_);
         }
 
-        const int step = r.inputs[rank_].getVal<int>("step", -1);
+        const int32_t step = r.inputs[rank_].getVal<int>("step", -1);
         if (step >= 0) {
             if (step <= seq.token_ids.size()) {
                 seq.token_ids.resize(step);
@@ -645,7 +641,7 @@ void LlamaBatch<T>::initialize(const std::vector<std::shared_ptr<Request>>& infe
         }
 
         // input length with missing cache accounted for
-        int actual_input_len = r.inputs[rank_].getVal<int>("input_lengths") + (seq.token_ids.size() - seq.cache_len);
+        int32_t actual_input_len = r.inputs[rank_].getVal<int>("input_lengths") + (seq.token_ids.size() - seq.cache_len);
 
         // insert `start_id` for empty sequences
         if (seq.token_ids.empty() && actual_input_len == 0) {
@@ -656,34 +652,34 @@ void LlamaBatch<T>::initialize(const std::vector<std::shared_ptr<Request>>& infe
 
         tmp_input_length[i] = actual_input_len;
 
-        tmp_max_input_length = std::max((int)tmp_max_input_length, actual_input_len);
+        tmp_max_input_length = std::max((int32_t)tmp_max_input_length, actual_input_len);
         tmp_cached_seq.push_back(std::move(seq));
     }
 
     FT_CHECK(tmp_max_input_length > 0);
-    const int max_input_length = tmp_max_input_length;
+    const int32_t max_input_length = tmp_max_input_length;
 
     // arrange requests in ascending order w.r.t actual input lengths, so that requests need context decoding will
     // be together
     {
-        std::vector<int> idxs(tmp_input_length.size());
+        std::vector<int32_t> idxs(tmp_input_length.size());
         std::iota(idxs.begin(), idxs.end(), 0);
-        std::sort(idxs.begin(), idxs.end(), [&](int i, int j) { return tmp_input_length[i] < tmp_input_length[j]; });
+        std::sort(idxs.begin(), idxs.end(), [&](int32_t i, int32_t j) { return tmp_input_length[i] < tmp_input_length[j]; });
         for (int i = 0; i < idxs.size(); ++i) {
             requests_[batch_size_ + i]   = infer_requests[idxs[i]];
             cached_seq_[batch_size_ + i] = tmp_cached_seq[idxs[i]];
         }
     }
 
-    const int count = batch_size_ + infer_requests.size();
+    const int32_t count = batch_size_ + infer_requests.size();
 
-    std::vector<int> tmp_input_len(count);
+    std::vector<int32_t> tmp_input_len(count);
     auto device_id = dipu::devapis::current_device();
 
     for (int i = batch_size_; i < count; ++i) {
         const auto& seq = cached_seq_[i];
 
-        h_input_length_buf_[i] = requests_[i]->inputs[rank_].getVal<int>("input_lengths");
+        h_input_length_buf_[i] = requests_[i]->inputs[rank_].getVal<int32_t>("input_lengths");
         tmp_input_len[i]       = h_input_length_buf_[i];
         // prepare output ids
         // <--------> max_context_len
@@ -736,7 +732,7 @@ void LlamaBatch<T>::initialize(const std::vector<std::shared_ptr<Request>>& infe
 
     for (int i = batch_size_; i < count; ++i) {
         const auto& seq           = cached_seq_[i];
-        const int   missed        = (int)seq.token_ids.size() - seq.cache_len;
+        const int32_t   missed        = (int32_t)seq.token_ids.size() - seq.cache_len;
         auto        input_ids_buf = input_ids_buf_ + i * session_len_;
         FT_CHECK(missed >= 0);
         if (missed > 0) {
@@ -759,14 +755,14 @@ void LlamaBatch<T>::initialize(const std::vector<std::shared_ptr<Request>>& infe
         h_history_length_buf_[i] = seq.cache_len;
         h_context_length_buf_[i] = h_input_length_buf_[i] + h_history_length_buf_[i];
 
-        const int request_output_len = requests_[i]->inputs[rank_].getVal<int32_t>("request_output_len");
+        const int32_t request_output_len = requests_[i]->inputs[rank_].getVal<int32_t>("request_output_len");
         request_seq_len_limit_[i]    = h_context_length_buf_[i] + request_output_len;
         // `length_criterion` sets finish flag when step >= seq_limit_len, however when step == seq_limit_len
         // the actual sequence length is seq_limit_len + 1, hence seq_limit_len must truncated to session_len - 1
         if (request_seq_len_limit_[i] >= session_len_) {
             request_seq_len_limit_[i] = session_len_ - 1;
             if (rank_ == 0) {
-                const int trunc_output_len = request_seq_len_limit_[i] - h_context_length_buf_[i];
+                const int32_t trunc_output_len = request_seq_len_limit_[i] - h_context_length_buf_[i];
                 TM_LOG_WARNING(
                     "[initialize] [%ld] total sequence length (%d + %d) exceeds session_len (%d), request_output_len is truncated to %d",
                     (long)seq.id,
@@ -781,7 +777,7 @@ void LlamaBatch<T>::initialize(const std::vector<std::shared_ptr<Request>>& infe
         h_v_cache_ptr_buf_[i] = (uint64_t)seq.v_cache;
     }
 
-    const int max_context_len = *std::max_element(h_context_length_buf_ + batch_size_, h_context_length_buf_ + count);
+    const int32_t max_context_len = *std::max_element(h_context_length_buf_ + batch_size_, h_context_length_buf_ + count);
 
     batch_size_      = count;
     max_context_len_ = max_context_len;
@@ -828,7 +824,7 @@ void LlamaBatch<T>::initialize(const std::vector<std::shared_ptr<Request>>& infe
 template<typename T>
 void LlamaBatch<T>::contextDecode()
 {
-    int base = -1;
+    int32_t base = -1;
     for (int i = 0; i < batch_size_; ++i) {
         if (h_input_length_buf_[i] > 1) {
             base = i;
@@ -839,12 +835,11 @@ void LlamaBatch<T>::contextDecode()
         check_cuda_error(dipu::devapis::syncStream(stream_));
         const auto tick = std::chrono::high_resolution_clock::now();
 
-        const int context_decode_count = batch_size_ - base;
+        const int32_t context_decode_count = batch_size_ - base;
         if (rank_ == 0) {
             TM_LOG_INFO("[decodeContext] base = %d, count = %d", base, context_decode_count);
         }
 
-        
         // invokePlusScalar(input_length_buf_ + base, -1, context_decode_count, stream_);
         // invokePlusScalar(context_length_buf_ + base, -1, context_decode_count, stream_);
         turbomind::Tensor input_length_buf_inout{MEMORY_GPU, TYPE_INT32, {context_decode_count}, input_length_buf_ + base};
@@ -866,7 +861,7 @@ void LlamaBatch<T>::contextDecode()
         auto offset          = base;
         for (int i = offset + 1; i <= batch_size_; ++i) {
             if (i == batch_size_ || token_num + h_context_length_buf_[i] > max_context_token_num_) {
-                const int context_decode_batch_size = i - offset;
+                const int32_t context_decode_batch_size = i - offset;
                 if (rank_ == 0) {
                     TM_LOG_INFO(
                         "[decodeContext] offset = %d, batch_size = %d, token_num = %d, max_input_len = %d, max_context_len = %d",
@@ -954,11 +949,11 @@ void LlamaBatch<T>::contextDecode()
 
 template<typename T>
 void LlamaBatch<T>::outputContextLogits(T*                      context_decoder_output,
-                                        const std::vector<int>& indices,
-                                        const std::vector<int>& lengths)
+                                        const std::vector<int32_t>& indices,
+                                        const std::vector<int32_t>& lengths)
 {
     std::vector<float*> output_logits;
-    int                 num_token = 0;
+    int32_t                 num_token = 0;
     {
         bool is_return_logits = false;
         for (int k = 0; k < indices.size(); ++k) {
@@ -1052,7 +1047,7 @@ template<typename T>
 void LlamaBatch<T>::synchronize()
 {
     // compact
-    int idx = 0;
+    int32_t idx = 0;
     for (int i = 0; i < batch_size_; ++i) {
         if (requests_[i]) {
             h_input_length_buf_[idx]   = 0;
@@ -1104,7 +1099,7 @@ void LlamaBatch<T>::synchronize()
 }
 
 template<typename T>
-void LlamaBatch<T>::setOutputTensors(int max_gen_step)
+void LlamaBatch<T>::setOutputTensors(int32_t max_gen_step)
 {
     // [s,b] -> [b,s] and skip padding in [context_len, max_context_len)
     // invokeGatherOutput(output_ids_buf_,
@@ -1150,7 +1145,7 @@ void LlamaBatch<T>::setOutputTensors(int max_gen_step)
 }
 
 template<typename T>
-void LlamaBatch<T>::finishRequest(int index, bool force_end)
+void LlamaBatch<T>::finishRequest(int32_t index, bool force_end)
 {
     if (rank_ == 0) {
         TM_LOG_INFO("[finishRequest] slot = %d, id = %lu", index, (long)requests_[index]->id);
@@ -1179,9 +1174,9 @@ void LlamaBatch<T>::finishRequest(int index, bool force_end)
     }
     else {
         // the last generated token is not processed by decoder thus dont have k/v cache
-        const int n_steps    = step_ - max_context_len_;
-        const int cache_len  = h_sequence_lengths_[index];
-        const int output_len = n_steps > 0 ? cache_len + 1 : cache_len;
+        const int32_t n_steps    = step_ - max_context_len_;
+        const int32_t cache_len  = h_sequence_lengths_[index];
+        const int32_t output_len = n_steps > 0 ? cache_len + 1 : cache_len;
 
         auto& seq = cached_seq_[index];
 

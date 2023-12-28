@@ -20,7 +20,7 @@ add_library(BaseSamplingLayer STATIC BaseSamplingLayer.cc)
 set_property(TARGET BaseSamplingLayer PROPERTY POSITION_INDEPENDENT_CODE  ON)
 # set_property(TARGET BaseSamplingLayer PROPERTY CUDA_RESOLVE_DEVICE_SYMBOLS  ON)
 # target_link_libraries(BaseSamplingLayer PUBLIC CUDA::cudart sampling_penalty_kernels memory_utils)
-target_link_libraries(BaseSamplingLayer PUBLIC memory_utils runtime)
+target_link_libraries(BaseSamplingLayer PUBLIC memory_utils dipu_rt)
 
 add_library(TopKSamplingLayer STATIC TopKSamplingLayer.cc)
 set_property(TARGET TopKSamplingLayer PROPERTY POSITION_INDEPENDENT_CODE  ON)

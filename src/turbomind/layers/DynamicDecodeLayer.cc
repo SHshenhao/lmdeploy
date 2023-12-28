@@ -208,7 +208,7 @@ void DynamicDecodeLayer<T>::forward(TensorMap* output_tensors, TensorMap* input_
 
     const size_t batch_size       = input_tensors->at("logits").shape[0];
     const size_t beam_width       = input_tensors->at("logits").shape[1];
-    const size_t local_batch_size = (size_t)input_tensors->at("local_batch_size").getVal<int>();
+    const size_t local_batch_size = (size_t)input_tensors->at("local_batch_size").getVal<int32_t>();
 
     if (input_tensors->isExist("bad_words_list")) {
         std::cout<<"bad_words_list"<<std::endl;
@@ -232,7 +232,8 @@ void DynamicDecodeLayer<T>::forward(TensorMap* output_tensors, TensorMap* input_
         const int id_offset                      = ite * local_batch_size;
         const int decode_vocab_size_units_offset = id_offset * vocab_size_padded_;
 
-        turbomind::Tensor output_ids_tensor{MEMORY_GPU, TYPE_INT32, {step, batch_size}, output_tensors->at("output_ids").getPtr<const int32_t>()};
+        auto& output_ids = output_tensors->at("output_ids");
+        turbomind::Tensor output_ids_tensor{MEMORY_GPU, TYPE_INT32, {step, batch_size}, output_ids.getPtr<const int32_t>()};
         turbomind::Tensor bad_words_tensor{MEMORY_GPU, TYPE_INT32, {batch_size, 2, bad_words_len}, bad_words_ptr}; 
         turbomind::Tensor logits_tensor{MEMORY_GPU, TYPE_FP32, {batch_size, vocab_size_padded_}, (T*)input_tensors->at("logits").getPtrWithOffset(decode_vocab_size_units_offset)};
         diopiConstTensorHandle_t diopi_output_ids_tensor = dipu::diopi_helper::toDiopiTensorHandle(output_ids_tensor);
@@ -323,17 +324,24 @@ void DynamicDecodeLayer<T>::forward(TensorMap* output_tensors, TensorMap* input_
     }
 
     if (input_tensors->isExist("stop_words_list")) {
-        std::cout<<"stop_words_list"<<std::endl;
         const size_t id_offset         = ite * local_batch_size * beam_width;
         const size_t stop_words_length = input_tensors->at("stop_words_list").shape[2];
 
-        turbomind::Tensor output_ids_tensor{MEMORY_GPU, TYPE_INT32, {step, batch_size}, output_tensors->at("output_ids").getPtr<const int>()};
-        turbomind::Tensor stop_words_tensor{MEMORY_GPU, TYPE_INT32, {batch_size, 2, stop_words_length}, input_tensors->at("stop_words_list").getPtrWithOffset<const int>(ite * local_batch_size * 2 * stop_words_length)}; 
+        auto& output_ids = output_tensors->at("output_ids");
+        std::cout<<"stop_words_list"<<step<<" "<<output_ids.shape[0]<<std::endl;
+        turbomind::Tensor output_ids_tensor{MEMORY_GPU, TYPE_INT32, {step+1, batch_size}, output_ids.getPtr<const int32_t>()};
+        turbomind::Tensor stop_words_tensor{MEMORY_GPU, TYPE_INT32, {batch_size, 2, stop_words_length}, input_tensors->at("stop_words_list").getPtrWithOffset<const int32_t>(ite * local_batch_size * 2 * stop_words_length)}; 
         turbomind::Tensor finished_tensor{MEMORY_GPU, TYPE_BOOL, {batch_size}, output_tensors->at("finished").getPtrWithOffset<bool>(id_offset)};
         diopiConstTensorHandle_t diopi_output_ids_tensor = dipu::diopi_helper::toDiopiTensorHandle(output_ids_tensor);
         diopiConstTensorHandle_t diopi_stop_words_tensor = dipu::diopi_helper::toDiopiTensorHandle(stop_words_tensor);
         diopiTensorHandle_t diopi_finished_tensor = dipu::diopi_helper::toDiopiTensorHandle(finished_tensor);
+        diopiTensorHandle_t diopi_old_finished_tensor;
+        int64_t batch_size_i64{batch_size};
+        diopiSize_t newshape{&batch_size_i64, 1};
+        diopiRequireTensor(&ctx_, &diopi_old_finished_tensor, &newshape, nullptr, diopi_dtype_bool, diopi_device);
+        diopiLmdeployCopyD2D(&ctx_, diopi_old_finished_tensor, diopi_finished_tensor, true);
         diopiStopWordsCriterion(&ctx_, diopi_output_ids_tensor, diopi_stop_words_tensor, diopi_finished_tensor, id_offset, stop_words_length, batch_size, step);
+        diopiLogicalOrInp(&ctx_, diopi_finished_tensor, diopi_old_finished_tensor);
         // invokeStopWordsCriterion(output_tensors->at("output_ids").getPtr<const int>(),
         //                          beam_width > 1 ? output_tensors->at("parent_ids").getPtr<const int>() : nullptr,
         //                          input_tensors->at("stop_words_list")
@@ -350,14 +358,28 @@ void DynamicDecodeLayer<T>::forward(TensorMap* output_tensors, TensorMap* input_
     if (input_tensors->isExist("sequence_limit_length")) {
         std::cout<<"sequence_limit_length"<<std::endl;
         turbomind::Tensor finished{MEMORY_GPU, TYPE_BOOL, {batch_size}, output_tensors->at("finished").getPtr<bool>()};
-        turbomind::Tensor should_stop{MEMORY_CPU, TYPE_BOOL, {1}, output_tensors->at("should_stop").getPtr<bool>()}; 
-        turbomind::Tensor finished_sum{MEMORY_CPU_PINNED, TYPE_INT32, {1}, h_pinned_finished_sum_};
+        turbomind::Tensor h_should_stop{MEMORY_CPU, TYPE_BOOL, {1}, output_tensors->at("should_stop").getPtr<bool>()}; 
+        turbomind::Tensor h_finished_sum{MEMORY_CPU_PINNED, TYPE_INT32, {1}, h_pinned_finished_sum_};
         turbomind::Tensor sequence_limit_length{MEMORY_GPU, TYPE_INT32, {batch_size}, input_tensors->at("sequence_limit_length").getPtr<const uint32_t>()};
         diopiTensorHandle_t diopi_finished = dipu::diopi_helper::toDiopiTensorHandle(finished);
-        diopiTensorHandle_t diopi_should_stop = dipu::diopi_helper::toDiopiTensorHandle(should_stop);
-        diopiTensorHandle_t diopi_finished_sum = dipu::diopi_helper::toDiopiTensorHandle(finished_sum);
+        diopiTensorHandle_t diopi_h_should_stop = dipu::diopi_helper::toDiopiTensorHandle(h_should_stop);
+        diopiTensorHandle_t diopi_h_finished_sum = dipu::diopi_helper::toDiopiTensorHandle(h_finished_sum);
         diopiConstTensorHandle_t diopi_sequence_limit_length = dipu::diopi_helper::toDiopiTensorHandle(sequence_limit_length);
+        diopiTensorHandle_t diopi_should_stop;
+        int64_t ione{1};
+        diopiSize_t oneshape{&ione, 1};
+        diopiRequireTensor(&ctx_, &diopi_should_stop, &oneshape, nullptr, diopi_dtype_bool, diopi_device);
+        diopiTensorHandle_t diopi_finished_sum;
+        diopiRequireTensor(&ctx_, &diopi_finished_sum, &oneshape, nullptr, diopi_dtype_int32, diopi_device);
+        diopiTensorHandle_t diopi_old_finished_tensor;
+        int64_t batch_size_i64{batch_size};
+        diopiSize_t newshape{&batch_size_i64, 1};
+        diopiRequireTensor(&ctx_, &diopi_old_finished_tensor, &newshape, nullptr, diopi_dtype_bool, diopi_device);
+        diopiLmdeployCopyD2D(&ctx_, diopi_old_finished_tensor, diopi_finished, true);
         diopiLengthCriterion(&ctx_, diopi_finished, diopi_should_stop, diopi_finished_sum, diopi_sequence_limit_length, batch_size, step);
+        diopiLogicalOrInp(&ctx_, diopi_finished, diopi_old_finished_tensor);
+        diopiLmdeployCopyD2H(&ctx_, diopi_h_should_stop, diopi_should_stop, false);
+        diopiLmdeployCopyD2H(&ctx_, diopi_h_finished_sum, diopi_finished_sum, false);
         // invokeLengthCriterion(output_tensors->at("finished").getPtr<bool>(),
         //                       output_tensors->at("should_stop").getPtr<bool>(),
         //                       h_pinned_finished_sum_,

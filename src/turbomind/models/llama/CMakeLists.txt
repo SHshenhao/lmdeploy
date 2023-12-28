@@ -49,7 +49,7 @@ target_link_libraries(Llama PUBLIC
         nccl_utils
         cuda_utils
         logger
-        runtime)
+        dipu_rt)
 
 # if (NOT MSVC)
 #         add_subdirectory(flash_attention2)

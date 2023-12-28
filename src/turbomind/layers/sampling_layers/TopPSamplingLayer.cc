@@ -136,12 +136,15 @@ void TopPSamplingLayer<T>::setup(const size_t batch_size, const size_t beam_widt
 
     if (runtime_top_k_size > 1) {
         FT_CHECK(runtime_top_k.size() == batch_size);
-        cudaH2Dcpy(runtime_top_k_buf_, runtime_top_k.getPtr<uint>(), batch_size);
+        // cudaH2Dcpy(runtime_top_k_buf_, runtime_top_k.getPtr<uint>(), batch_size);
+        dipu::devapis::memCopyH2DAsync(stream_, sizeof(uint) * batch_size, runtime_top_k_buf_, runtime_top_k.getPtr<uint>());
     }
     if (runtime_top_p_size > 1) {
         FT_CHECK(runtime_top_p.size() == batch_size);
-        cudaH2Dcpy(runtime_top_p_buf_, runtime_top_p.getPtr<float>(), batch_size);
+        // cudaH2Dcpy(runtime_top_p_buf_, runtime_top_p.getPtr<float>(), batch_size);
+        dipu::devapis::memCopyH2DAsync(stream_, sizeof(float) * batch_size, runtime_top_p_buf_, runtime_top_p.getPtr<float>());
     }
+    sync_check_cuda_error();
 
     // dim3 block(std::min((int)batch_size, 256));
     // dim3 grid(div_up((int)batch_size, (int)block.x));
@@ -184,7 +187,6 @@ void TopPSamplingLayer<T>::setup(const size_t batch_size, const size_t beam_widt
     diopiTensorHandle_t top_p_decay_buf = dipu::diopi_helper::toDiopiTensorHandle(top_p_decay_buf_tensor);
     diopiTensorHandle_t top_p_min_buf = dipu::diopi_helper::toDiopiTensorHandle(top_p_min_buf_tensor);
     diopiTensorHandle_t top_p_reset_ids_buf = dipu::diopi_helper::toDiopiTensorHandle(top_p_reset_ids_buf_tensor);
-    std::cout<<"diopiSetupToppRuntimeArgsInp++"<<std::endl;
     if (top_p_decay == nullptr) top_p_decay_ = nullptr;
     if (top_p_min == nullptr) top_p_min_ = nullptr;
     if (top_p_reset_ids == nullptr) top_p_reset_ids_ = nullptr;
@@ -197,6 +199,7 @@ void TopPSamplingLayer<T>::setup(const size_t batch_size, const size_t beam_widt
     dipu::devapis::memCopyD2HAsync(stream_, sizeof(bool) * batch_size, skip_decode_, skip_decode_buf_);
     float* runtime_top_ps = new float[batch_size];
     dipu::devapis::memCopyD2HAsync(stream_, sizeof(float) * batch_size, runtime_top_ps, runtime_top_p_buf_);
+    sync_check_cuda_error();
     runtime_max_top_p_ = *std::max_element(runtime_top_ps, runtime_top_ps + batch_size);
     delete[] runtime_top_ps;
 }
@@ -227,10 +230,10 @@ void TopPSamplingLayer<T>::runSampling(TensorMap* output_tensors, TensorMap* inp
     FT_CHECK(input_tensors->size() >= 4);
     FT_CHECK(output_tensors->size() >= 1);
 
-    const int batch_size       = output_tensors->at("output_ids").shape[1];
-    const int local_batch_size = input_tensors->at("logits").shape[0];
-    const int step             = input_tensors->at("step").getVal<int>();
-    const int ite              = input_tensors->at("ite").getVal<int>();
+    const int32_t batch_size       = output_tensors->at("output_ids").shape[1];
+    const int32_t local_batch_size = input_tensors->at("logits").shape[0];
+    const int32_t step             = input_tensors->at("step").getVal<int32_t>();
+    const int32_t ite              = input_tensors->at("ite").getVal<int32_t>();
 
     // in case of skip any, the logit value is already copied and processed.
     T* logits = !skip_any_ ? input_tensors->at("logits").getPtr<T>() : runtime_logits_buf_;
@@ -303,18 +306,11 @@ void TopPSamplingLayer<T>::runSampling(TensorMap* output_tensors, TensorMap* inp
     diopiGetTensorDtype(input, &dtype);
     sampling_workspace_ = allocator_->reMalloc(sampling_workspace_, workspace_size + persistent_workspace_size, true);
     diopiSize_t workspace_stride{static_cast<const int64_t*>(reinterpret_cast<int64_t*>(sampling_workspace_)), -1};
-    diopiRequireTensor(&ctx_, &workspace, &newshape, &workspace_stride, dtype, diopiDevice_t::diopi_device);
-    // void* temp_ptr;
-    // diopiGetTensorData(workspace, &temp_ptr);
+    diopiRequireTensor(&ctx_, &workspace, &newshape, &workspace_stride, diopiDtype_t::diopi_dtype_int8, diopiDevice_t::diopi_device);
     shape[0] = persistent_workspace_size;
     newshape.len = 1;
     diopiSize_t persistent_workspace_stride{static_cast<const int64_t*>(reinterpret_cast<int64_t*>(reinterpret_cast<char*>(sampling_workspace_) + workspace_size)), -1};
-    diopiRequireTensor(&ctx_, &persistent_workspace, &newshape, &persistent_workspace_stride, dtype, diopiDevice_t::diopi_device);
-    // void* temp_ptr;
-    // diopiGetTensorData(persistent_workspace, &temp_ptr);
-    // std::cout<<"++diopiTopPSampling++"<<std::endl;
-    // std::cout<<"workspace:"<<workspace_size<<std::endl;
-    // std::cout<<"persistent_workspace:"<<persistent_workspace_size<<std::endl;
+    diopiRequireTensor(&ctx_, &persistent_workspace, &newshape, &persistent_workspace_stride, diopiDtype_t::diopi_dtype_int8, diopiDevice_t::diopi_device);
     std::vector<diopiGeneratorHandle_t> generators;
     for (auto &state: curandstate_buf_) {
         generators.emplace_back(dipu::diopi_helper::toDiopiGeneratorHandle(state));
