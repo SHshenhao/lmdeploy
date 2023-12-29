@@ -23,7 +23,7 @@ protected:
   void update_state();
 
   uint64_t seed_ = 0;
-  turbomind::Tensor state_;
+  turbomind::Tensor state_{};
   bool state_need_reset_ = true;
 };
 
