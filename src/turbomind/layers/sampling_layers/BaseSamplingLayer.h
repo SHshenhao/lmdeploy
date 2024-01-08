@@ -21,6 +21,7 @@
 
 #include "src/turbomind/kernels/penalty_types.h"
 #include "src/turbomind/layers/DynamicDecodeBaseLayer.h"
+#include "src/turbomind/utils/indexablelist.h"
 
 namespace turbomind {
 
@@ -35,7 +36,7 @@ protected:
 
     size_t              sampling_workspace_size_;
     void*               sampling_workspace_ = nullptr;
-    std::vector<dipu::DIPURawGeneratorImpl> curandstate_buf_{};
+    IndexableList<dipu::DIPURawGeneratorImpl> curandstate_buf_{};
     unsigned long long* random_seeds_buf_   = nullptr;
 
     float* temperature_buf_        = nullptr;
@@ -59,7 +60,7 @@ protected:
     virtual void allocateBuffer(size_t batch_size, Tensor top_k, Tensor top_p);
 
 public:
-    std::vector<dipu::DIPURawGeneratorImpl>& curandstate_buf()
+    IndexableList<dipu::DIPURawGeneratorImpl>& curandstate_buf()
     {
         return curandstate_buf_;
     }

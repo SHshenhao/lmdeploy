@@ -22,6 +22,7 @@
 #include "src/turbomind/layers/BaseLayer.h"
 #include "src/turbomind/layers/DynamicDecodeBaseLayer.h"
 #include "src/turbomind/layers/sampling_layers/TopPSamplingLayer.h"
+#include "src/turbomind/utils/indexablelist.h"
 
 namespace turbomind {
 
@@ -53,11 +54,11 @@ protected:
     int32_t* h_pinned_finished_sum_ = nullptr;
 
 public:
-    std::vector<dipu::DIPURawGeneratorImpl>& topk_curandstate_buf()
+    IndexableList<dipu::DIPURawGeneratorImpl>& topk_curandstate_buf()
     {
         return static_cast<BaseSamplingLayer<T>*>(topk_decode_)->curandstate_buf();
     }
-    std::vector<dipu::DIPURawGeneratorImpl>& topp_curandstate_buf()
+    IndexableList<dipu::DIPURawGeneratorImpl>& topp_curandstate_buf()
     {
         return static_cast<BaseSamplingLayer<T>*>(topp_decode_)->curandstate_buf();
     }

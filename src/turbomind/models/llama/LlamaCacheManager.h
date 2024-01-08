@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "src/turbomind/runtime/diopirt/diopirt_impl.h"
+#include "src/turbomind/utils/indexablelist.h"
 
 namespace turbomind {
 
@@ -57,7 +58,7 @@ public:
         void*            k_cache;
         void*            v_cache;
 
-        std::vector<dipu::DIPURawGeneratorImpl> random_state_;  // states for RNGs
+        IndexableList<dipu::DIPURawGeneratorImpl> random_state_;  // states for RNGs
 
         // for LRU policy
         uint64_t timestamp;

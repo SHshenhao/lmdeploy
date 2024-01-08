@@ -223,8 +223,8 @@ void LlamaBatch<T>::allocatePersistantBuffer(size_t max_batch_size)
 
     // topk_curandstate_buf_ = allocator_->reMalloc(topk_curandstate_buf_, sizeof(curandState_t) * max_batch_size, true);
     // topp_curandstate_buf_ = allocator_->reMalloc(topp_curandstate_buf_, sizeof(curandState_t) * max_batch_size, true);
-    std::vector<dipu::DIPURawGeneratorImpl> temp_topk_curandstate_buf_(max_batch_size);
-    std::vector<dipu::DIPURawGeneratorImpl> temp_topp_curandstate_buf_(max_batch_size);
+    IndexableList<dipu::DIPURawGeneratorImpl> temp_topk_curandstate_buf_(max_batch_size);
+    IndexableList<dipu::DIPURawGeneratorImpl> temp_topp_curandstate_buf_(max_batch_size);
     topk_curandstate_buf_.swap(temp_topk_curandstate_buf_);
     topp_curandstate_buf_.swap(temp_topp_curandstate_buf_);
 

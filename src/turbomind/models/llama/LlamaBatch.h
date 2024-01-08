@@ -9,6 +9,7 @@
 // #include "src/turbomind/utils/cublasMMWrapper.h"
 
 #include "src/turbomind/runtime/diopirt/diopirt_impl.h"
+#include "src/turbomind/utils/indexablelist.h"
 
 namespace turbomind {
 
@@ -132,8 +133,8 @@ private:
     float*    h_repetition_penalty_{};
     uint64_t* h_random_seed_{};
 
-    std::vector<dipu::DIPURawGeneratorImpl> topk_curandstate_buf_{};
-    std::vector<dipu::DIPURawGeneratorImpl> topp_curandstate_buf_{};
+    IndexableList<dipu::DIPURawGeneratorImpl> topk_curandstate_buf_{};
+    IndexableList<dipu::DIPURawGeneratorImpl> topp_curandstate_buf_{};
 
     // hard limits for persistent buffers
     static constexpr int32_t kMaxStopBadWordsLen = 32;
