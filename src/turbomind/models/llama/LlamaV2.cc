@@ -85,7 +85,7 @@ LlamaV2<T>::LlamaV2(size_t                       head_num,
     allocator_(allocator),
     is_free_buffer_after_forward_(is_free_buffer_after_forward),
     cuda_device_prop_(cuda_device_prop),
-    debug_(true), // isDebug()
+    debug_(isDebug()),
     step_length_(step_length),
     batch_(max_batch_size, max_context_token_num, session_len, this),
     shared_state_(shared_state)
@@ -201,7 +201,7 @@ void LlamaV2<T>::embeddingLookup(T* embeddings, const int32_t* token_ids_buf, in
     //                                          stream_);
     turbomind::Tensor from_tensor {MEMORY_GPU, turbomind::getTensorType<T>(), {batch_size, hidden_units_}, embeddings};
     turbomind::Tensor embedding_table{MEMORY_GPU, turbomind::getTensorType<T>(), {vocab_size_, hidden_units_}, weights_->pre_decoder_embedding_table}; 
-    turbomind::Tensor all_ids{MEMORY_GPU, turbomind::getTensorType<int32_t>(), {batch_.sessionLen(), batch_size}, token_ids_buf};
+    turbomind::Tensor all_ids{MEMORY_GPU, TYPE_INT32, {batch_.sessionLen(), batch_size}, token_ids_buf};
     diopiTensorHandle_t diopi_from_tensor = dipu::diopi_helper::toDiopiTensorHandle(from_tensor);
     diopiConstTensorHandle_t diopi_embedding_table = dipu::diopi_helper::toDiopiTensorHandle(embedding_table);
     diopiConstTensorHandle_t diopi_all_ids = dipu::diopi_helper::toDiopiTensorHandle(all_ids);
@@ -245,7 +245,7 @@ void LlamaV2<T>::contextDecode(T*         deocder_output,
     //                                          stream_);
     turbomind::Tensor from_tensor {MEMORY_GPU, turbomind::getTensorType<T>(), {token_num, hidden_units_}, context_decoder_input_buf};
     turbomind::Tensor embedding_table{MEMORY_GPU, turbomind::getTensorType<T>(), {vocab_size_, hidden_units_}, weights_->pre_decoder_embedding_table}; 
-    turbomind::Tensor input_ids_tensor{MEMORY_GPU, turbomind::getTensorType<int32_t>(), {token_num}, input_ids};
+    turbomind::Tensor input_ids_tensor{MEMORY_GPU, TYPE_INT32, {token_num}, input_ids};
     diopiTensorHandle_t diopi_from_tensor = dipu::diopi_helper::toDiopiTensorHandle(from_tensor);
     diopiConstTensorHandle_t diopi_embedding_table = dipu::diopi_helper::toDiopiTensorHandle(embedding_table);
     diopiConstTensorHandle_t diopi_input_ids_tensor = dipu::diopi_helper::toDiopiTensorHandle(input_ids_tensor);

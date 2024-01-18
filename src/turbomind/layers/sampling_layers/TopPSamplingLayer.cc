@@ -202,6 +202,18 @@ void TopPSamplingLayer<T>::setup(const size_t batch_size, const size_t beam_widt
     sync_check_cuda_error();
     runtime_max_top_p_ = *std::max_element(runtime_top_ps, runtime_top_ps + batch_size);
     delete[] runtime_top_ps;
+    // top_ks_tensor.saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/topp_setup_topks.npy");
+    // top_ps_tensor.saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/topp_setup_topps.npy");
+    // skip_decode_tensor.saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/topp_setup_skip.npy");
+    // initial_top_p_tensor.saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/topp_setup_inittopp.npy");
+    // if (top_p_decay != nullptr) top_p_decay_tensor.saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/topp_setup_toppdecay.npy");
+    // if (top_p_min != nullptr) top_p_min_tensor.saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/topp_setup_toppmin.npy");
+    // if (top_p_reset_ids != nullptr) top_p_reset_ids_tensor.saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/topp_setup_toppresetid.npy");
+    // top_p_decay_buf_tensor.saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/topp_setup_toppdecay_buf.npy");
+    // top_p_min_buf_tensor.saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/topp_setup_toppmin_buf.npy");
+    // top_p_reset_ids_buf_tensor.saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/topp_setup_toppresetid_buf.npy");
+    // std::cout<<"topp_setup save end!"<<std::endl;
+    // exit(0);
 }
 
 template<typename T>
@@ -245,18 +257,18 @@ void TopPSamplingLayer<T>::runSampling(TensorMap* output_tensors, TensorMap* inp
     // cum_log_probs = reinterpret_cast<float*>(allocator_->reMalloc(cum_log_probs, sizeof(float) * batch_size, false));
     // output_log_probs = reinterpret_cast<float*>(allocator_->reMalloc(output_log_probs, sizeof(float) * batch_size, false));
 
-    std::cout<<"cum_log_probs:"<<(cum_log_probs == nullptr)<<std::endl;
+    // std::cout<<"cum_log_probs:"<<(cum_log_probs == nullptr)<<std::endl;
     turbomind::Tensor cum_log_probs_tensor{MEMORY_GPU, TYPE_FP32, {int64_t(batch_size)}, cum_log_probs};
     diopiTensorHandle_t cum_log_probs_ = dipu::diopi_helper::toDiopiTensorHandle(cum_log_probs_tensor);
     if (cum_log_probs == nullptr) cum_log_probs_ = nullptr;
-    std::cout<<"output_log_probs:"<<(output_log_probs == nullptr)<<std::endl;
+    // std::cout<<"output_log_probs:"<<(output_log_probs == nullptr)<<std::endl;
     turbomind::Tensor output_log_probs_tensor{MEMORY_GPU, TYPE_FP32, {int64_t(batch_size)}, output_log_probs};
     diopiTensorHandle_t output_log_probs_ = dipu::diopi_helper::toDiopiTensorHandle(output_log_probs_tensor);
     if (output_log_probs == nullptr) output_log_probs_ = nullptr;
     bool* finished_ptr = output_tensors->at("finished", Tensor{MEMORY_GPU, TYPE_INVALID, {}, nullptr}).getPtr<bool>();
     turbomind::Tensor& finished_tensor = output_tensors->at("finished");
     diopiTensorHandle_t finished = dipu::diopi_helper::toDiopiTensorHandle(finished_tensor);
-    std::cout<<"finished:"<<(finished_ptr == nullptr)<<std::endl;
+    // std::cout<<"finished:"<<(finished_ptr == nullptr)<<std::endl;
     turbomind::Tensor& output_ids_tensor = output_tensors->at("output_ids");
     diopiTensorHandle_t output_ids = dipu::diopi_helper::toDiopiTensorHandle(output_ids_tensor);
     turbomind::Tensor top_ps_tensor{MEMORY_GPU, TYPE_FP32, {int64_t(batch_size)}, runtime_top_p_buf_};
@@ -322,7 +334,11 @@ void TopPSamplingLayer<T>::runSampling(TensorMap* output_tensors, TensorMap* inp
                                          top_ps, initial_top_p, top_p_decay,
                                          top_p_min, top_p_reset_ids, skip_decode,
                                          cum_log_probs_, output_log_probs_, generators.data());
-
+    // skip_decode_tensor.saveNpy("/hwtest/lmdeploy/shenhao/work/lmdeploy/data/toppsampling_skip.npy");
+    // output_ids_tensor.saveNpy("/hwtest/lmdeploy/shenhao/work/lmdeploy/data/toppsampling_outids.npy");
+    // finished_tensor.saveNpy("/hwtest/lmdeploy/shenhao/work/lmdeploy/data/toppsampling_after_finished.npy");
+    // std::cout<<"topp_sampling save end!"<<std::endl;
+    // exit(0);
     // invokeTopPInitialize(
     //     topp_id_vals_buf_, topp_offset_buf_, begin_topp_offset_buf_, local_batch_size, vocab_size_padded_, stream_);
     // sync_check_cuda_error();

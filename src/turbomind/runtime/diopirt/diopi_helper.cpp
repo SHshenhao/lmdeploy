@@ -27,10 +27,12 @@ diopiError_t clearDiopiContextAll(diopiContext& ctx) {
             if (tensor.where == turbomind::MEMORY_GPU) {
                 dipu::devapis::freeDevice(tensor.data);
                 ptr_map.emplace(tensor.data);
+                tensor.data = nullptr;
             }
             if (tensor.where == turbomind::MEMORY_CPU_PINNED) {
                 dipu::devapis::freeHost(tensor.data);
                 ptr_map.emplace(tensor.data);
+                tensor.data = nullptr;
             }
         }
     }
@@ -52,10 +54,12 @@ diopiError_t clearDiopiContextAfterN(diopiContext& ctx, int64_t num) {
             if (tensor.where == turbomind::MEMORY_GPU) {
                 ptr_map.emplace(tensor.data);
                 dipu::devapis::freeDevice(tensor.data);
+                tensor.data = nullptr;
             }
             if (tensor.where == turbomind::MEMORY_CPU_PINNED) {
                 ptr_map.emplace(tensor.data);
                 dipu::devapis::freeHost(tensor.data);
+                tensor.data = nullptr;
             }
         }
     }

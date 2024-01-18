@@ -187,7 +187,7 @@ void LlamaDecoder<T>::forward(std::unordered_map<std::string, Tensor>*        ou
      */
 
     // for the shape of key cache, refer to decoder_masked_multihead_attention_template.hpp
-    std::cout<<"LlamaDecoder<T>::forward start! :"<<ctx_.arrays.size()<<std::endl;
+    // std::cout<<"LlamaDecoder<T>::forward start! :"<<ctx_.arrays.size()<<std::endl;
     Session sess{};
     sess.batch_size = input_tensors->at("decoder_input").shape[0];
     sess.weights    = decoder_layer_weights;
@@ -202,6 +202,9 @@ void LlamaDecoder<T>::forward(std::unordered_map<std::string, Tensor>*        ou
 
     T* decoder_input  = input_tensors->at("decoder_input").getPtr<T>();
     T* decoder_output = output_tensors->at("decoder_output").getPtr<T>();
+
+    // input_tensors->at("decoder_input").saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/LlamaDecoder_decoder_input0.npy");
+    // output_tensors->at("decoder_output").saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/LlamaDecoder_decoder_output0.npy");
 
     ////////////////////////////////////////////
     /// RMSNorm
@@ -269,8 +272,14 @@ void LlamaDecoder<T>::forward(std::unordered_map<std::string, Tensor>*        ou
         diopiRequireTensor(&ctx_, &temp_vcache, &newshape, &temp_vcache_ptr_stride, dtype, device);
         key_cache[i] = temp_kcache;
         value_cache[i] = temp_vcache;
+        // if (true) { // isdebug
+        //     std::string kcache_str{"/nvme/share/share/shenhao/tis/lmdeploy/data/LlamaDecoder_decoder_kcache"};
+        //     std::string vcache_str{"/nvme/share/share/shenhao/tis/lmdeploy/data/LlamaDecoder_decoder_vcache"};
+        //     reinterpret_cast<turbomind::Tensor*>(temp_kcache)->saveNpy(kcache_str + std::to_string(i) + ".npy");
+        //     reinterpret_cast<turbomind::Tensor*>(temp_vcache)->saveNpy(vcache_str + std::to_string(i) + ".npy");
+        // }
     }
-    std::cout<<"sess.ite:"<<sess.ite<<std::endl;
+    // std::cout<<"sess.ite:"<<sess.ite<<std::endl;
     float rotary_embedding_base{attn_params_.rotary_embedding_base};
     int64_t rotray_embedding_dim{attn_params_.rotray_embedding_dim};
 
@@ -292,7 +301,7 @@ void LlamaDecoder<T>::forward(std::unordered_map<std::string, Tensor>*        ou
     diopiFusedDecoderAttentionInp(&ctx_, diopi_decoder_output_tensor, nullptr, nullptr, nullptr, &workspace_size, 0, key_cache, value_cache,
                                     nullptr, nullptr, sequence_lengths, step, 0, local_head_num,
                                     local_kv_head_num, size_per_head, max_seq_len, rotray_embedding_dim, rotary_embedding_base);
-    std::cout<<"workspace_size:"<<workspace_size<<std::endl;
+    // std::cout<<"workspace_size:"<<workspace_size<<std::endl;
     workspace_ = allocator_->reMalloc(workspace_, workspace_size, false);
     diopiTensorHandle_t workspace;
     shape[0] = workspace_size;
@@ -318,6 +327,9 @@ void LlamaDecoder<T>::forward(std::unordered_map<std::string, Tensor>*        ou
     diopiSize_t diopi_decoder_tmp_tensor_stride{static_cast<const int64_t*>(reinterpret_cast<int64_t*>(workspace_)), -1};
     diopiRequireTensor(&ctx_, &diopi_decoder_tmp_tensor, &decoder_input_tensor_shape, &diopi_decoder_tmp_tensor_stride, dtype, device);
 
+    // input_tensors->at("decoder_input").saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/LlamaDecoder_decoder_input1.npy");
+    // output_tensors->at("decoder_output").saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/LlamaDecoder_decoder_output1.npy");
+    int64_t N = ctx_.arrays.size();
     for (size_t layer = 0; layer < num_layer_; ++layer) {
         // output: self_attn_output_, k_cache, v_cache = self_attn(decoder_normed_input_)
         // forwardSelfAttn(sess, decoder_output, input_tensors, layer);
@@ -335,6 +347,8 @@ void LlamaDecoder<T>::forward(std::unordered_map<std::string, Tensor>*        ou
         turbomind::Tensor weightoutput_tensor{MEMORY_GPU, data_type_, {int64_t(hidden_units_), int64_t(hidden_units_)}, sess.weights->at(layer)->self_attn_weights.output.kernel};
         diopiTensorHandle_t weightoutput = dipu::diopi_helper::toDiopiTensorHandle(weightoutput_tensor);
         diopiMm(&ctx_, diopi_decoder_tmp_tensor, diopi_decoder_output_tensor, weightoutput);
+        // input_tensors->at("decoder_input").saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/LlamaDecoder_decoder_input2.npy");
+        // output_tensors->at("decoder_output").saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/LlamaDecoder_decoder_output2.npy");
 
         // invokeFusedAddBiasResidualRMSNorm(decoder_input,
         //                                   decoder_output,
@@ -355,6 +369,8 @@ void LlamaDecoder<T>::forward(std::unordered_map<std::string, Tensor>*        ou
         diopiTensorHandle_t diopi_rms_attn_weights = dipu::diopi_helper::toDiopiTensorHandle(rms_attn_weights);
         diopiRMSNorm(&ctx_, diopi_decoder_output_tensor, invRMS, diopi_decoder_input_tensor, normalized_shape, diopi_rms_attn_weights, nullptr, rmsnorm_eps_);
         sync_check_cuda_error();
+        // input_tensors->at("decoder_input").saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/LlamaDecoder_decoder_input3.npy");
+        // output_tensors->at("decoder_output").saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/LlamaDecoder_decoder_output3.npy");
 
         // decoder_layer_output_ = ffn(decoder_normed_input_)
         // forwardFfn(sess, decoder_output, layer);
@@ -365,6 +381,8 @@ void LlamaDecoder<T>::forward(std::unordered_map<std::string, Tensor>*        ou
         turbomind::Tensor weight2_tensor{MEMORY_GPU, data_type_, {int64_t(inter_size_), int64_t(hidden_units_)}, sess.weights->at(layer)->ffn_weights.output.kernel};
         diopiTensorHandle_t weight2 = dipu::diopi_helper::toDiopiTensorHandle(weight2_tensor);
         diopiFusedSiluFfnInp(&ctx_, diopi_decoder_output_tensor, weight1, weight2, weight3, workspace, &workspace_size, 0);
+        // input_tensors->at("decoder_input").saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/LlamaDecoder_decoder_input4.npy");
+        // output_tensors->at("decoder_output").saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/LlamaDecoder_decoder_output4.npy");
 
         auto scale_weight = layer < num_layer_ - 1 ? decoder_layer_weights->at(layer + 1)->self_attn_norm_weights :
                                                      input_tensors->at("output_norm_weight").getPtr<T>();
@@ -386,15 +404,18 @@ void LlamaDecoder<T>::forward(std::unordered_map<std::string, Tensor>*        ou
         turbomind::Tensor rms_ffn_weights{MEMORY_GPU, data_type_, {hidden_units_}, scale_weight};
         diopiTensorHandle_t diopi_rms_ffn_weights = dipu::diopi_helper::toDiopiTensorHandle(rms_ffn_weights);
         diopiRMSNorm(&ctx_, diopi_decoder_output_tensor, invRMS, diopi_decoder_input_tensor, normalized_shape, diopi_rms_ffn_weights, nullptr, rmsnorm_eps_);
-
         sync_check_cuda_error();
+        dipu::diopi_helper::clearDiopiContextAfterN(ctx_, N);
     }
 
     dipu::diopi_helper::clearDiopiContextAll(ctx_);
     if (is_free_buffer_after_forward_) {
         freeBuffer();
     }
-    std::cout<<"LlamaDecoder<T>::forward end! :"<<ctx_.arrays.size()<<std::endl;
+    // input_tensors->at("decoder_input").saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/LlamaDecoder_decoder_inputz.npy");
+    // output_tensors->at("decoder_output").saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/LlamaDecoder_decoder_outputz.npy");
+    // exit(0);
+    // std::cout<<"LlamaDecoder<T>::forward end! :"<<ctx_.arrays.size()<<std::endl;
 }
 
 template class LlamaDecoder<half>;

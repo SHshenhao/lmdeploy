@@ -200,7 +200,6 @@ void DynamicDecodeLayer<T>::forward(TensorMap* output_tensors, TensorMap* input_
      *   \param  beam_hyps: [1] on cpu, a special structure which maintains some pointers of beam search
      *
      */
-    std::cout<<"DynamicDecodeLayer<T>::forward start! :"<<ctx_.arrays.size()<<std::endl;
     TM_LOG_DEBUG(__PRETTY_FUNCTION__);
     const int ite  = (int)input_tensors->at("ite").getVal<uint>();
     const int step = input_tensors->at("step").getVal<int>();
@@ -211,7 +210,6 @@ void DynamicDecodeLayer<T>::forward(TensorMap* output_tensors, TensorMap* input_
     const size_t local_batch_size = (size_t)input_tensors->at("local_batch_size").getVal<int32_t>();
 
     if (input_tensors->isExist("bad_words_list")) {
-        std::cout<<"bad_words_list"<<std::endl;
         const auto& bad_words     = input_tensors->at("bad_words_list");
         const int*  bad_words_ptr = bad_words.getPtr<const int32_t>();
         FT_CHECK_WITH_INFO(bad_words.shape.size() == 2 || bad_words.shape.size() == 3,
@@ -241,21 +239,6 @@ void DynamicDecodeLayer<T>::forward(TensorMap* output_tensors, TensorMap* input_
         diopiTensorHandle_t diopi_logits_tensor = dipu::diopi_helper::toDiopiTensorHandle(logits_tensor);
         diopiBanBadWordsInp(&ctx_, diopi_logits_tensor, diopi_output_ids_tensor, diopi_bad_words_tensor, id_offset,
             bad_words_len, shared_bad_words, batch_size, vocab_size_padded_, step);
-        // invokeBanBadWords((T*)input_tensors->at("logits").getPtrWithOffset(decode_vocab_size_units_offset),
-        //                   output_tensors->at("output_ids").getPtr<const int>(),
-        //                   beam_width > 1 ? output_tensors->at("parent_ids").getPtr<const int>() : nullptr,
-        //                   batch_size,
-        //                   local_batch_size,
-        //                   beam_width,
-        //                   shared_bad_words ?
-        //                       bad_words_ptr :
-        //                       bad_words.getPtrWithOffset<const int>(ite * local_batch_size * 2 * bad_words_len),
-        //                   shared_bad_words,
-        //                   bad_words_len,
-        //                   id_offset,
-        //                   vocab_size_padded_,
-        //                   step,
-        //                   stream_);
     }
 
     // dynamic decode GPT
@@ -264,7 +247,6 @@ void DynamicDecodeLayer<T>::forward(TensorMap* output_tensors, TensorMap* input_
     }
     else {  // beam_width=1
         // In sampling, we have supported batch sampling. So, we always compute all sentences once.
-        std::cout<<"beam_width=1"<<std::endl;
         const size_t local_batch_offset = ite * local_batch_size * beam_width;
 
         Tensor logits = input_tensors->at("logits");
@@ -328,7 +310,6 @@ void DynamicDecodeLayer<T>::forward(TensorMap* output_tensors, TensorMap* input_
         const size_t stop_words_length = input_tensors->at("stop_words_list").shape[2];
 
         auto& output_ids = output_tensors->at("output_ids");
-        std::cout<<"stop_words_list"<<step<<" "<<output_ids.shape[0]<<std::endl;
         turbomind::Tensor output_ids_tensor{MEMORY_GPU, TYPE_INT32, {step+1, batch_size}, output_ids.getPtr<const int32_t>()};
         turbomind::Tensor stop_words_tensor{MEMORY_GPU, TYPE_INT32, {batch_size, 2, stop_words_length}, input_tensors->at("stop_words_list").getPtrWithOffset<const int32_t>(ite * local_batch_size * 2 * stop_words_length)}; 
         turbomind::Tensor finished_tensor{MEMORY_GPU, TYPE_BOOL, {batch_size}, output_tensors->at("finished").getPtrWithOffset<bool>(id_offset)};
@@ -342,21 +323,9 @@ void DynamicDecodeLayer<T>::forward(TensorMap* output_tensors, TensorMap* input_
         diopiLmdeployCopyD2D(&ctx_, diopi_old_finished_tensor, diopi_finished_tensor, true);
         diopiStopWordsCriterion(&ctx_, diopi_output_ids_tensor, diopi_stop_words_tensor, diopi_finished_tensor, id_offset, stop_words_length, batch_size, step);
         diopiLogicalOrInp(&ctx_, diopi_finished_tensor, diopi_old_finished_tensor);
-        // invokeStopWordsCriterion(output_tensors->at("output_ids").getPtr<const int>(),
-        //                          beam_width > 1 ? output_tensors->at("parent_ids").getPtr<const int>() : nullptr,
-        //                          input_tensors->at("stop_words_list")
-        //                              .getPtrWithOffset<const int>(ite * local_batch_size * 2 * stop_words_length),
-        //                          output_tensors->at("finished").getPtrWithOffset<bool>(id_offset),
-        //                          id_offset,
-        //                          stop_words_length,
-        //                          batch_size,
-        //                          beam_width,
-        //                          step,
-        //                          stream_);
     }
 
     if (input_tensors->isExist("sequence_limit_length")) {
-        std::cout<<"sequence_limit_length"<<std::endl;
         turbomind::Tensor finished{MEMORY_GPU, TYPE_BOOL, {batch_size}, output_tensors->at("finished").getPtr<bool>()};
         turbomind::Tensor h_should_stop{MEMORY_CPU, TYPE_BOOL, {1}, output_tensors->at("should_stop").getPtr<bool>()}; 
         turbomind::Tensor h_finished_sum{MEMORY_CPU_PINNED, TYPE_INT32, {1}, h_pinned_finished_sum_};
@@ -380,18 +349,9 @@ void DynamicDecodeLayer<T>::forward(TensorMap* output_tensors, TensorMap* input_
         diopiLogicalOrInp(&ctx_, diopi_finished, diopi_old_finished_tensor);
         diopiLmdeployCopyD2H(&ctx_, diopi_h_should_stop, diopi_should_stop, false);
         diopiLmdeployCopyD2H(&ctx_, diopi_h_finished_sum, diopi_finished_sum, false);
-        // invokeLengthCriterion(output_tensors->at("finished").getPtr<bool>(),
-        //                       output_tensors->at("should_stop").getPtr<bool>(),
-        //                       h_pinned_finished_sum_,
-        //                       input_tensors->at("sequence_limit_length").getPtr<const uint32_t>(),
-        //                       batch_size,
-        //                       beam_width,
-        //                       step,
-        //                       stream_);
     }
     sync_check_cuda_error();
     dipu::diopi_helper::clearDiopiContextAll(ctx_);
-    std::cout<<"DynamicDecodeLayer<T>::forward end! :"<<ctx_.arrays.size()<<std::endl;
 }
 
 template<typename T>

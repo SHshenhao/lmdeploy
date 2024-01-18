@@ -1,7 +1,6 @@
 // Copyright (c) OpenMMLab. All rights reserved.
 
 #include "src/turbomind/models/llama/LlamaBatch.h"
-// #include "src/turbomind/kernels/decoding_kernels.h"
 #include "src/turbomind/macro.h"
 #include "src/turbomind/models/llama/LlamaNcclGuard.h"
 #include "src/turbomind/models/llama/LlamaV2.h"
@@ -139,7 +138,6 @@ void LlamaBatch<T>::handleStopRequests(const std::vector<std::shared_ptr<Request
             auto& sequence_length = r->outputs[rank_].at("sequence_length");
             check_cuda_error(dipu::devapis::memSetAsync(stream_, output_ids.getPtr<int32_t>(), 0, sizeof(int32_t) * output_ids.shape.at(2)));
             check_cuda_error(dipu::devapis::memSetAsync(stream_, sequence_length.getPtr<int32_t>(), 0, sizeof(int32_t)));
-            // check_cuda_error(cudaStreamSynchronize(stream_));
             check_cuda_error(dipu::devapis::syncStream(stream_));
         }
 
@@ -221,8 +219,6 @@ void LlamaBatch<T>::allocatePersistantBuffer(size_t max_batch_size)
                         {"repetition_penalty", h_repetition_penalty_},
                         {"random_seed", h_random_seed_}};
 
-    // topk_curandstate_buf_ = allocator_->reMalloc(topk_curandstate_buf_, sizeof(curandState_t) * max_batch_size, true);
-    // topp_curandstate_buf_ = allocator_->reMalloc(topp_curandstate_buf_, sizeof(curandState_t) * max_batch_size, true);
     IndexableList<dipu::DIPURawGeneratorImpl> temp_topk_curandstate_buf_(max_batch_size);
     IndexableList<dipu::DIPURawGeneratorImpl> temp_topp_curandstate_buf_(max_batch_size);
     topk_curandstate_buf_.swap(temp_topk_curandstate_buf_);
@@ -356,20 +352,30 @@ void LlamaBatch<T>::initializeSampling(int32_t infer_request_count)
             } else {
                 memset(param.second, 0, size_in_bytes * batch_size_);
             }
+            turbomind::MemoryType inputwhere = turbomind::MemoryType::MEMORY_CPU;
             for (int i = 0; i < batch_size_; ++i) {
                 if (requests_[i]->inputs[rank_].isExist(param.first)) {
                     auto& src = requests_[i]->inputs[rank_].at(param.first);
                     FT_CHECK(ref.shape == src.shape);
                     if (param.first == "stop_words_list" || param.first == "bad_words_list") {
-                        auto device_id = dipu::devapis::current_device();
-                        check_cuda_error(dipu::devapis::memCopyD2DAsync(stream_, size_in_bytes, device_id, (uint8_t*)param.second + size_in_bytes * i,
-                                                     device_id, src.getPtr<void>()));
+                        inputwhere = turbomind::MemoryType::MEMORY_GPU;
+                        if (ref.where == turbomind::MemoryType::MEMORY_GPU) {
+                            auto device_id = dipu::devapis::current_device();
+                            check_cuda_error(dipu::devapis::memCopyD2DAsync(stream_, size_in_bytes, device_id, (uint8_t*)param.second + size_in_bytes * i,
+                                                        device_id, src.getPtr<void>()));
+                        } else {
+                            check_cuda_error(dipu::devapis::memCopyH2DAsync(stream_, size_in_bytes, (uint8_t*)param.second + size_in_bytes * i, src.getPtr<void>()));
+                        }
                     } else {
-                        memcpy((uint8_t*)param.second + size_in_bytes * i, src.getPtr<void>(), size_in_bytes);
+                        if (ref.where == turbomind::MemoryType::MEMORY_GPU) {
+                            check_cuda_error(dipu::devapis::memCopyD2HAsync(stream_, size_in_bytes, (uint8_t*)param.second + size_in_bytes * i, src.getPtr<void>()));
+                        } else {
+                            memcpy((uint8_t*)param.second + size_in_bytes * i, src.getPtr<void>(), size_in_bytes);
+                        }
                     }
                 }
             }
-            inputs.insert({param.first, {ref.where, ref.type, shape, param.second}});
+            inputs.insert({param.first, {inputwhere, ref.type, shape, param.second}});
             if (debug_ && rank_ == 0) {
                 TM_LOG_INFO("[initializeSampling] %s", format({param.first, inputs.at(param.first)}).c_str());
             }
@@ -385,13 +391,6 @@ void LlamaBatch<T>::initializeSampling(int32_t infer_request_count)
         if (i < batch_size_ - infer_request_count || !requests_[i]->inputs[rank_].isExist("random_seed")) {
             llama_->dynamic_decode_layer_->topk_curandstate_buf()[i].set_state(topk_curandstate_buf_[i].get_state());
             llama_->dynamic_decode_layer_->topp_curandstate_buf()[i].set_state(topp_curandstate_buf_[i].get_state()); // SH check
-            // check_cuda_error(memcpy(llama_->dynamic_decode_layer_->topk_curandstate_buf() + i,
-            //                                  (curandState_t*)topk_curandstate_buf_ + i,
-            //                                  sizeof(dipu::DIPURawGeneratorImpl),
-            //                                  cudaMemcpyDefault,
-            //                                  stream_)); // SH  cudaMemcpyDefault
-            // check_cuda_error(memcpy(sizeof(curandState_t), llama_->dynamic_decode_layer_->topp_curandstate_buf() + i,
-            //                                  (d*)topp_curandstate_buf_ + i)); // SH  cudaMemcpyDefault
         }
     }
 
@@ -415,9 +414,8 @@ void LlamaBatch<T>::initializeGeneration()
     max_context_len_ = *std::max_element(h_context_length_buf_, h_context_length_buf_ + batch_size_);
 
     check_cuda_error(dipu::devapis::memSetAsync(stream_, token_ids_buf_, 0, sizeof(int) * batch_size_ * session_len_ * 2));
-    // invokeTransposeAxis01(token_ids_buf_, output_ids_buf_, batch_size_, session_len_, 1, stream_);
-    turbomind::Tensor token_ids_buf_tensor{MEMORY_GPU, getTensorType<T>(), {int64_t(session_len_), int64_t(batch_size_)}, token_ids_buf_};
-    turbomind::Tensor output_ids_buf_tensor{MEMORY_GPU, getTensorType<T>(), {int64_t(batch_size_), int64_t(session_len_)}, output_ids_buf_};
+    turbomind::Tensor token_ids_buf_tensor{MEMORY_GPU, TYPE_INT32, {int64_t(session_len_), int64_t(batch_size_)}, token_ids_buf_};
+    turbomind::Tensor output_ids_buf_tensor{MEMORY_GPU, TYPE_INT32, {int64_t(batch_size_), int64_t(session_len_)}, output_ids_buf_};
     diopiTensorHandle_t diopi_token_ids_buf = dipu::diopi_helper::toDiopiTensorHandle(token_ids_buf_tensor);
     diopiTensorHandle_t diopi_output_ids_buf = dipu::diopi_helper::toDiopiTensorHandle(output_ids_buf_tensor);
     diopiTranspose(&ctx_, diopi_token_ids_buf, diopi_output_ids_buf, 1, 0);
@@ -441,14 +439,10 @@ void LlamaBatch<T>::initializeGeneration()
     }
 
     check_cuda_error(dipu::devapis::memCopyH2DAsync(stream_, sizeof(int32_t) * batch_size_, context_length_buf_, h_context_length_buf_));
-        // context_length_buf_, h_context_length_buf_, sizeof(int) * batch_size_, cudaMemcpyDefault, stream_)); // SH cudaMemcpyDefault
     check_cuda_error(dipu::devapis::memCopyH2DAsync(stream_, sizeof(uintptr_t) * batch_size_, k_cache_ptr_buf_, h_k_cache_ptr_buf_));
-        // k_cache_ptr_buf_, h_k_cache_ptr_buf_, sizeof(uintptr_t) * batch_size_, cudaMemcpyDefault, stream_)); // SH cudaMemcpyDefault
     check_cuda_error(dipu::devapis::memCopyH2DAsync(stream_, sizeof(uintptr_t) * batch_size_, v_cache_ptr_buf_, h_v_cache_ptr_buf_));
-        // v_cache_ptr_buf_, h_v_cache_ptr_buf_, sizeof(uintptr_t) * batch_size_, cudaMemcpyDefault, stream_)); // SH cudaMemcpyDefault
     auto device_id = dipu::devapis::current_device();
     check_cuda_error(dipu::devapis::memCopyD2DAsync(stream_, sizeof(int32_t) * batch_size_, device_id, sequence_lengths_, device_id, context_length_buf_));
-        // cudaMemcpyAsync(sequence_lengths_, context_length_buf_, sizeof(int) * batch_size_, cudaMemcpyDefault, stream_)); // SH cudaMemcpyDefault
     // `sequence_lengths_` will be increased by dynamic decode
     // note that in decoder and in output "sequence length" has different semantic
     // - in decoder it means length of sequence that has kv cache already computed
@@ -457,17 +451,12 @@ void LlamaBatch<T>::initializeGeneration()
     turbomind::Tensor plusscalar_inout{MEMORY_GPU, TYPE_INT32, {batch_size_}, sequence_lengths_};
     diopiTensorHandle_t diopi_plusscalar_inout_tesnor = dipu::diopi_helper::toDiopiTensorHandle(plusscalar_inout);
     diopiPlusScalarInp(&ctx_, diopi_plusscalar_inout_tesnor, -1, batch_size_);
+    dipu::devapis::syncStream(stream_);
     sync_check_cuda_error();
 
     // total_padding_count_
     // decoding starts at max_context_len
     check_cuda_error(dipu::devapis::memSetAsync(stream_, total_padding_count_, 0, sizeof(int32_t) * batch_size_));
-    // invokeUpdatePaddingCount(total_padding_count_,  //
-    //                          context_length_buf_,
-    //                          max_context_len_,
-    //                          batch_size_,
-    //                          1,
-    //                          stream_);
     turbomind::Tensor updatepaddingcount_input{MEMORY_GPU, TYPE_INT32, {batch_size_}, context_length_buf_};
     turbomind::Tensor updatepaddingcount_output{MEMORY_GPU, TYPE_INT32, {batch_size_}, total_padding_count_};
     diopiConstTensorHandle_t dipoi_input_tensor = dipu::diopi_helper::toDiopiTensorHandle(updatepaddingcount_input);
@@ -483,9 +472,7 @@ void LlamaBatch<T>::initializeGeneration()
         h_finished_buf_[i] = max_context_len_ >= h_seq_limit_len_[i];
     }
     check_cuda_error(dipu::devapis::memCopyH2DAsync(stream_, sizeof(uint32_t) * batch_size_, seq_limit_len_, h_seq_limit_len_));
-        // cudaMemcpyAsync(seq_limit_len_, h_seq_limit_len_, sizeof(uint32_t) * batch_size_, cudaMemcpyDefault, stream_));
     check_cuda_error(dipu::devapis::memCopyH2DAsync(stream_, sizeof(bool) * batch_size_, finished_buf_, h_finished_buf_));
-        // cudaMemcpyAsync(finished_buf_, h_finished_buf_, sizeof(bool) * batch_size_, cudaMemcpyDefault, stream_));
 
     // ! range of step_ [1, 2 * session_len]
     // consider a sequence with context_len == session_len and another sequence with context_len == 1 and
@@ -521,13 +508,11 @@ bool LlamaBatch<T>::generate()
     std::vector<int32_t> prev;
     if (debug_ && rank_ == 0 && is_first_step) {
         prev.resize(batch_size_);
-        // cudaMemcpyAsync(prev.data(),
-        //                 token_ids_buf_ + (step_ - 1) * batch_size_,
-        //                 sizeof(int) * batch_size_,
-        //                 cudaMemcpyDefault,
-        //                 stream_);
         dipu::devapis::memCopyD2HAsync(stream_, sizeof(int32_t) * batch_size_, prev.data(), token_ids_buf_ + (step_ - 1) * batch_size_);
         dipu::devapis::syncStream(stream_);
+        // for (int64_t i = 0; i < batch_size_; i++) {
+        //     std::cout<<"step_:"<<step_<<" prev"<<prev[i]<<std::endl;
+        // }
     }
 
     // embeddingLookup(step_ - 1);
@@ -547,7 +532,6 @@ bool LlamaBatch<T>::generate()
                            0,
                            session_len_,
                            batch_size_);
-    // std::this_thread::sleep_for(std::chrono::hours(10000));
     llama_->postDecodeEmbedding(logits_buf_,  //
                                 local_logits_buf_,
                                 decoder_output_buf_,
@@ -574,9 +558,6 @@ bool LlamaBatch<T>::generate()
     if (debug_ && rank_ == 0) {
         std::vector<int32_t> curr(batch_size_);
 
-        // cudaMemcpyAsync(
-        //     curr.data(), token_ids_buf_ + step_ * batch_size_, sizeof(int) * batch_size_, cudaMemcpyDefault, stream_);
-        // cudaStreamSynchronize(stream_);
         auto device_id = dipu::devapis::current_device();
         dipu::devapis::memCopyD2HAsync(stream_, sizeof(int32_t) * batch_size_, curr.data(), token_ids_buf_ + step_ * batch_size_);
         dipu::devapis::syncStream(stream_);

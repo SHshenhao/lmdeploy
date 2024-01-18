@@ -72,7 +72,7 @@ void handleOptArg(TensorMap* input_tensors, const std::string& arg_name, T* d_pt
     if (input_tensors->isExist(arg_name)) {
         FT_CHECK(input_tensors->at(arg_name).size() == size);
         // cudaH2Dcpy(d_ptr, input_tensors->at(arg_name).getPtr<const T>(), size);
-        dipu::devapis::memCopyH2D(size, d_ptr, input_tensors->at(arg_name).getPtr<const T>());
+        dipu::devapis::memCopyH2D(sizeof(T) * size, d_ptr, input_tensors->at(arg_name).getPtr<const T>());
     }
     else {
         deviceFill(d_ptr, size, default_value);

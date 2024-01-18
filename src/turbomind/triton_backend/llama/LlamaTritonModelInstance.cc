@@ -131,10 +131,6 @@ LlamaTritonModelInstance<T>::convert_outputs(const std::unordered_map<std::strin
     std::unordered_map<std::string, triton::Tensor>* outputs_mapping =
         new std::unordered_map<std::string, triton::Tensor>();
 
-    // for (auto it = output_tensors.begin(); it != output_tensors.end(); it++) {
-    //     outputs_mapping->insert({it->first, triton::Tensor::convertFtTensorToTriton(it->second)});
-    // }
-
     ft::Tensor h_output_ids_tensor{turbomind::MEMORY_CPU, output_tensors.at("output_ids").type, output_tensors.at("output_ids").shape, (void*)(model->h_output_ids_)};
     dipu::devapis::memCopyD2H(output_tensors.at("output_ids").sizeBytes(), model->h_output_ids_, model->d_output_ids_); // SH MEMORY_CPU_PINNED?
     outputs_mapping->insert({"output_ids", triton::Tensor::convertFtTensorToTriton(h_output_ids_tensor)});
@@ -247,25 +243,18 @@ LlamaTritonModelInstance<T>::forward(std::shared_ptr<std::unordered_map<std::str
                                           ft::TYPE_FP32,
                                           std::vector<int64_t>{request_batch_size, beam_width},
                                           d_cum_log_probs_}});
-        std::cout<<"is_return_log_probs!"<<std::endl;
-    } else {
-        std::cout<<"NOT is_return_log_probs!"<<std::endl;
     }
 
     if (is_return_logits) {
         output_tensors.insert(
             {"logits",
              {ft::MEMORY_GPU, ft::TYPE_FP32, {request_batch_size, int64_t(max_input_len), int64_t(vocab_size)}, d_output_logits_}});
-        std::cout<<"is_return_logits!"<<std::endl;
-    } else {
-        std::cout<<"NOT is_return_logits!"<<std::endl;
     }
 
     try {
         ft::Request::Callback callback;
 
         if (stream_cb_) {
-            std::cout<<"stream_cb_"<<std::endl;
             callback = [this](std::unordered_map<std::string, ft::Tensor>* outputs) {
                 triton_stream_callback<T>(outputs, this);
             };

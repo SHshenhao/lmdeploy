@@ -144,6 +144,11 @@ void TopKSamplingLayer<T>::setup(const size_t batch_size, const size_t beam_widt
     dipu::devapis::memCopyD2HAsync(stream_, sizeof(int32_t) * batch_size, runtime_top_ks, runtime_top_k_buf_);
     runtime_max_top_k_ = static_cast<int>(*std::max_element(runtime_top_ks, runtime_top_ks + batch_size));
     delete[] runtime_top_ks;
+    // top_ks_tensor.saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/topk_setup_topks.npy");
+    // top_ps_tensor.saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/topk_setup_topps.npy");
+    // skip_decode_tensor.saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/topk_setup_skip.npy");
+    // std::cout<<"topk_setup save end!"<<std::endl;
+    // exit(0);
 }
 
 template<typename T>
@@ -185,18 +190,18 @@ void TopKSamplingLayer<T>::runSampling(TensorMap* output_tensors, TensorMap* inp
     // cum_log_probs = reinterpret_cast<float*>(allocator_->reMalloc(cum_log_probs, sizeof(float) * batch_size, false));
     // output_log_probs = reinterpret_cast<float*>(allocator_->reMalloc(output_log_probs, sizeof(float) * batch_size, false));
 
-    std::cout<<"cum_log_probs:"<<(cum_log_probs == nullptr)<<std::endl;
+    // std::cout<<"cum_log_probs:"<<(cum_log_probs == nullptr)<<std::endl;
     turbomind::Tensor cum_log_probs_tensor{MEMORY_GPU, TYPE_FP32, {int64_t(batch_size)}, cum_log_probs};
     diopiTensorHandle_t cum_log_probs_ = dipu::diopi_helper::toDiopiTensorHandle(cum_log_probs_tensor);
     if (cum_log_probs == nullptr) cum_log_probs_ = nullptr;
-    std::cout<<"output_log_probs:"<<(output_log_probs == nullptr)<<std::endl;
+    // std::cout<<"output_log_probs:"<<(output_log_probs == nullptr)<<std::endl;
     turbomind::Tensor output_log_probs_tensor{MEMORY_GPU, TYPE_FP32, {int64_t(batch_size)}, output_log_probs};
     diopiTensorHandle_t output_log_probs_ = dipu::diopi_helper::toDiopiTensorHandle(output_log_probs_tensor);
     if (output_log_probs == nullptr) output_log_probs_ = nullptr;
     bool* finished_ptr = output_tensors->at("finished", Tensor{MEMORY_GPU, TYPE_INVALID, {}, nullptr}).getPtr<bool>();
     turbomind::Tensor& finished_tensor = output_tensors->at("finished");
     diopiTensorHandle_t finished = dipu::diopi_helper::toDiopiTensorHandle(finished_tensor);
-    std::cout<<"finished:"<<(finished_ptr == nullptr)<<std::endl;
+    // std::cout<<"finished:"<<(finished_ptr == nullptr)<<std::endl;
     turbomind::Tensor& output_ids_tensor = output_tensors->at("output_ids");
     diopiTensorHandle_t output_ids = dipu::diopi_helper::toDiopiTensorHandle(output_ids_tensor);
     turbomind::Tensor top_ks_tensor{MEMORY_GPU, TYPE_INT32, {int64_t(batch_size)}, runtime_top_k_buf_};
@@ -209,7 +214,7 @@ void TopKSamplingLayer<T>::runSampling(TensorMap* output_tensors, TensorMap* inp
     diopiConstTensorHandle_t end_ids = dipu::diopi_helper::toDiopiTensorHandle(end_ids_tensor);
     int* sequence_lengths_ptr = output_tensors->at("sequence_length", Tensor{MEMORY_GPU, TYPE_INVALID, {}, nullptr}).getPtr<int>();
     turbomind::Tensor& sequence_lengths_tensor = output_tensors->at("sequence_length");
-    std::cout<<"sequence_lengths:"<<(sequence_lengths_ptr == nullptr)<<std::endl;
+    // std::cout<<"sequence_lengths:"<<(sequence_lengths_ptr == nullptr)<<std::endl;
     diopiTensorHandle_t sequence_lengths = dipu::diopi_helper::toDiopiTensorHandle(sequence_lengths_tensor);
     // turbomind::Tensor& logits_tensor = input_tensors->at("logits");
     turbomind::Tensor logits_tensor{MEMORY_GPU, TYPE_FP32, {int64_t(batch_size), int64_t(vocab_size_padded_)}, logits};
@@ -239,11 +244,27 @@ void TopKSamplingLayer<T>::runSampling(TensorMap* output_tensors, TensorMap* inp
     for (auto &state: curandstate_buf_) {
         generators.emplace_back(dipu::diopi_helper::toDiopiGeneratorHandle(state));
     }
+    // finished_tensor.saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/topksampling_before_finished.npy");
+    // logits_tensor.saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/topksampling_before_logits.npy");
     diopiTopKSampling(&ctx_, output_ids, input, workspace, &workspace_size, 0, end_ids, finished,
                                         sequence_lengths, step, batch_size, vocab_size_padded_,
                                         top_ks, top_ps, skip_decode,
                                         cum_log_probs_, output_log_probs_, generators.data());
-
+    // skip_decode_tensor.saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/topksampling_skip.npy");
+    // output_ids_tensor.saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/topksampling_outids.npy");
+    // finished_tensor.saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/topksampling_after_finished.npy");
+    // // if (cum_log_probs != nullptr) cum_log_probs_tensor.saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/topksampling_cumlog.npy");
+    // // if (output_log_probs != nullptr) output_log_probs_tensor.saveNpy("/nvme/share/share/shenhao/tis/lmdeploy/data/topksampling_outlog.npy");
+    // float h_cum_log_probs_[batch_size];
+    // float h_output_log_probs_[batch_size];
+    // dipu::devapis::memCopyD2H(sizeof(float) * batch_size, reinterpret_cast<void*>(h_cum_log_probs_), reinterpret_cast<void*>(cum_log_probs));
+    // dipu::devapis::memCopyD2H(sizeof(float) * batch_size, reinterpret_cast<void*>(h_output_log_probs_), reinterpret_cast<void*>(output_log_probs));
+    // for (int64_t i = 0; i < batch_size; i++) {
+    //     std::cout<<i<<"h_cum_log_probs_:"<<h_cum_log_probs_[i]<<std::endl;
+    //     std::cout<<i<<"h_output_log_probs_:"<<h_output_log_probs_[i]<<std::endl;
+    // }
+    // std::cout<<"topk_sampling save end!"<<std::endl;
+    // exit(0);
     // invokeAddBiasEndMask(logits,
     //                      (T*)(nullptr),
     //                      input_tensors->at("end_id").getPtr<const int>(),
