@@ -318,7 +318,7 @@ void LlamaContextDecoder<T>::forward(std::unordered_map<std::string, Tensor>*   
     int64_t workspace_size = -1;
     int64_t pre_work_size = -1;
     diopiFusedContextAttentionInp(&ctx_, diopi_decoder_output_tensor, nullptr, nullptr, nullptr, &pre_work_size, true, nullptr, &workspace_size, 0,
-                    key_cache, value_cache, input_lengths, history_lengths, context_lengths,
+                    key_cache, value_cache, batch_size, input_lengths, history_lengths, context_lengths,
                     0, int64_t(local_head_num), int64_t(local_kv_head_num), int64_t(size_per_head), int64_t(max_seq_len),
                     int64_t(max_q_len), int64_t(max_kv_len), rotray_embedding_dim, rotary_embedding_base);
     workspace_ = allocator_->reMalloc(workspace_, workspace_size, false);
@@ -332,7 +332,7 @@ void LlamaContextDecoder<T>::forward(std::unordered_map<std::string, Tensor>*   
     diopiSize_t workspace_stride{static_cast<const int64_t*>(reinterpret_cast<int64_t*>(workspace_)), -1};
     diopiRequireTensor(&ctx_, &workspace, &newshape, &workspace_stride, dtype, device);
     diopiFusedContextAttentionInp(&ctx_, diopi_decoder_output_tensor, nullptr, nullptr, diopi_attention_mask, &pre_work_size, false, workspace, &workspace_size, 0,
-                    key_cache, value_cache, input_lengths, history_lengths, context_lengths,
+                    key_cache, value_cache, batch_size, input_lengths, history_lengths, context_lengths,
                     0, int64_t(local_head_num), int64_t(local_kv_head_num), int64_t(size_per_head), int64_t(max_seq_len),
                     int64_t(max_q_len), int64_t(max_kv_len), rotray_embedding_dim, rotary_embedding_base);
 
@@ -367,7 +367,7 @@ void LlamaContextDecoder<T>::forward(std::unordered_map<std::string, Tensor>*   
         diopiTensorHandle_t weightqkv = dipu::diopi_helper::toDiopiTensorHandle(weightqkv_tensor);
         diopiTensorHandle_t weightbias = dipu::diopi_helper::toDiopiTensorHandle(weightbias_tensor);
         diopiFusedContextAttentionInp(&ctx_, diopi_decoder_output_tensor, weightqkv, weightbias, diopi_attention_mask, &pre_work_size, true, workspace, &workspace_size, 0,
-                        key_cache, value_cache, input_lengths, history_lengths, context_lengths,
+                        key_cache, value_cache, batch_size, input_lengths, history_lengths, context_lengths,
                         int64_t(layer), int64_t(local_head_num), int64_t(local_kv_head_num), int64_t(size_per_head), int64_t(max_seq_len),
                         int64_t(max_q_len), int64_t(max_kv_len), rotray_embedding_dim, rotary_embedding_base);
         turbomind::Tensor weightoutput_tensor{MEMORY_GPU, data_type_, {int64_t(hidden_units_), int64_t(hidden_units_)}, sess.weights->at(layer)->self_attn_weights.output.kernel};
