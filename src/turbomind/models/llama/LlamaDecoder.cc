@@ -298,7 +298,7 @@ void LlamaDecoder<T>::forward(std::unordered_map<std::string, Tensor>*        ou
     // diopiLmdeployCopyD2D(&ctx_, diopi_decoder_output_tensor, diopi_decoder_input_tensor, false); // SH RMSNorm
 
     int64_t workspace_size = -1;
-    diopiFusedDecoderAttentionInp(&ctx_, diopi_decoder_output_tensor, nullptr, nullptr, nullptr, &workspace_size, 0, key_cache, value_cache,
+    diopiFusedDecoderAttentionInp(&ctx_, diopi_decoder_output_tensor, nullptr, nullptr, nullptr, &workspace_size, 0, key_cache, value_cache, batch_size,
                                     nullptr, nullptr, sequence_lengths, step, 0, local_head_num,
                                     local_kv_head_num, size_per_head, max_seq_len, rotray_embedding_dim, rotary_embedding_base);
     // std::cout<<"workspace_size:"<<workspace_size<<std::endl;
@@ -340,7 +340,7 @@ void LlamaDecoder<T>::forward(std::unordered_map<std::string, Tensor>*        ou
         // void* temp_ptr;
         // diopiGetTensorData(workspace, &temp_ptr);
         // std::cout<<"++diopiFusedDecoderAttentionInp++"<<std::endl;
-        diopiFusedDecoderAttentionInp(&ctx_, diopi_decoder_output_tensor, weightqkv, weightbias, workspace, &workspace_size, 0, key_cache, value_cache,
+        diopiFusedDecoderAttentionInp(&ctx_, diopi_decoder_output_tensor, weightqkv, weightbias, workspace, &workspace_size, 0, key_cache, value_cache, batch_size,
                                         finished_data, total_padding_tokens, sequence_lengths, step, layer, local_head_num,
                                         local_kv_head_num, size_per_head, max_seq_len, rotray_embedding_dim, rotary_embedding_base);
 
