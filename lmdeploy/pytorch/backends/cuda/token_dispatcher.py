@@ -6,7 +6,7 @@ except ImportError:
     use_deepep = False
 
 import os
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Any
 
 import torch
 import torch.distributed as dist
@@ -156,6 +156,8 @@ class DeepEPDispatcher:
         self.token_probs = None
         # Handle used for combine operation
         self.handle = None
+        # shared experts
+        self.shared_experts = None
 
         # `num_max_dispatch_tokens_per_rank` (the actual batch size in the decoding engine) should be less than 256
         # https://github.com/deepseek-ai/DeepEP?tab=readme-ov-file#example-use-in-inference-decoding
@@ -212,18 +214,32 @@ class DeepEPDispatcher:
         num_experts: int,
         previous_event=None,
         num_max_dispatch_tokens_per_rank: int = 128,
+        is_prefill: bool = False,
+        is_decoding: bool = False
     ):
         self.hidden_shape = hidden_states.shape
+        # yield for attn1, dis (+share)
+        yield
+        previous_event = self.buffer_normal.capture()
         (
-            hidden_states,
-            topk_idx,
-            topk_weights,
+            recv_hidden_states,
+            recv_topk_idx,
+            recv_topk_weights,
             num_recv_tokens_per_expert_list,
             handle,
             event,
-        ) = yield from self.dispatch_normal_yield(
-            hidden_states, topk_idx, topk_weights, num_experts, previous_event
+        ) = self.dispatch_normal_async(
+            hidden_states, topk_idx, topk_weights, num_experts, previous_event, True
         )
+        if is_decoding and self.shared_experts is not None:
+            shared_states = self.shared_experts(hidden_states)
+        else:
+            shared_states = None
+        # yield for dis (+share), dis_wait
+        yield
+        event.current_stream_wait()
+        # yield for dis_wait, moe
+        yield
         self.tokens_per_expert = torch.tensor(
             num_recv_tokens_per_expert_list,
             device=hidden_states.device,
@@ -231,11 +247,11 @@ class DeepEPDispatcher:
         )
         tokens_per_expert = self.get_number_of_tokens_per_expert()
         self.handle = handle
-        self.topk_idx = topk_idx
-        self.topk_weights = topk_weights
-        if hidden_states.shape[0] > 0:
-            hidden_states = self.get_permuted_hidden_states_by_experts(hidden_states)
-        return hidden_states, topk_idx, topk_weights, tokens_per_expert
+        self.topk_idx = recv_topk_idx
+        self.topk_weights = recv_topk_weights
+        if recv_hidden_states.shape[0] > 0:
+            recv_hidden_states = self.get_permuted_hidden_states_by_experts(recv_hidden_states)
+        return recv_hidden_states, recv_topk_idx, recv_topk_weights, tokens_per_expert, shared_states
 
     def dispatch_normal(
         self,
@@ -288,7 +304,7 @@ class DeepEPDispatcher:
             event,
         )
 
-    def dispatch_normal_yield(
+    def dispatch_normal_async(
         self,
         x: torch.Tensor,
         topk_idx: torch.Tensor,
@@ -297,8 +313,6 @@ class DeepEPDispatcher:
         previous_event=None,
         async_finish=True
     ):
-        yield
-        previous_event = self.buffer_normal.capture() if async_finish else None
         (
             num_tokens_per_rank,
             num_tokens_per_rdma_rank,
@@ -333,9 +347,6 @@ class DeepEPDispatcher:
             allocate_on_comm_stream=previous_event is not None and async_finish,
         )
 
-        yield
-        if async_finish:
-            event.current_stream_wait()
         return (
             recv_x,
             recv_topk_idx,
@@ -357,15 +368,34 @@ class DeepEPDispatcher:
         return hidden_states.view(self.hidden_shape)
 
     def combine_yield(
-        self, hidden_states: torch.Tensor
+        self,
+        out_states: torch.Tensor,
+        hidden_states: torch.Tensor,
+        is_prefill: bool = False,
+        is_decoding: bool = False
     ):
-        if hidden_states.shape[0] > 0:
-            hidden_states = self.get_restored_hidden_states_by_experts(
-                hidden_states
+        if out_states.shape[0] > 0:
+            out_states = self.get_restored_hidden_states_by_experts(
+                out_states
             )
-        hidden_states, event = yield from self.combine_normal_yield(hidden_states, self.handle)
+        # yield for moe, comb
+        yield
+        previous_event = self.buffer_normal.capture()
+        out_states, event = self.combine_normal_async(out_states,
+                                                         self.handle,
+                                                         previous_event=previous_event,
+                                                         async_finish=True)
+        # yield for comb, (+share) comb_wait,
+        yield
+        if is_prefill and self.shared_experts is not None:
+            shared_states = self.shared_experts(hidden_states)
+        else:
+            shared_states = None
+        event.current_stream_wait()
+        # yield for (+share) comb_wait, (+share) attn0
+        yield
         self.handle = None
-        return hidden_states.view(self.hidden_shape)
+        return out_states.view(self.hidden_shape), shared_states
 
     def combine_normal(self, x: torch.Tensor, handle: Tuple, previous_event=None):
         combined_x, _, event = self.buffer_normal.combine(
@@ -377,9 +407,7 @@ class DeepEPDispatcher:
         )
         return combined_x, event
 
-    def combine_normal_yield(self, x: torch.Tensor, handle: Tuple, previous_event=None, async_finish=True):
-        yield
-        previous_event = self.buffer_normal.capture() if async_finish else None
+    def combine_normal_async(self, x: torch.Tensor, handle: Tuple, previous_event=None, async_finish=True):
         combined_x, _, event = self.buffer_normal.combine(
             x,
             handle,
@@ -387,10 +415,6 @@ class DeepEPDispatcher:
             previous_event=previous_event,
             allocate_on_comm_stream=previous_event is not None and async_finish,
         )
-
-        yield
-        if async_finish:
-            event.current_stream_wait()
         return combined_x, event
 
     def _indices_to_multihot(self, indices, probs):
@@ -456,3 +480,11 @@ class DeepEPDispatcher:
             fused=self.permute_fusion,
         )
         return hidden_states.to(input_dtype)
+
+    def set_shared_experts(self, shared_experts: Any = None):
+        if self.shared_experts is not None:
+            self.shared_experts = shared_experts
+        return self.shared_experts
+
+    def get_shared_experts(self):
+        return self.shared_experts

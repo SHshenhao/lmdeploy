@@ -4,14 +4,16 @@ from copy import deepcopy
 import torch
 import lmdeploy.pytorch.distributed as dist
 
+ENABLE_TWO=True
+
 class ExecType(Enum):
     """batch ecex type."""
     One = auto()
     Two0101 = auto()
     Two0110 = auto()
     TwoLikeOne = auto()
-
-ENABLE_TWO=True
+    TwoPrefill = auto()
+    TwoDecode = auto()
 
 class BatchWorker:
     def __init__(self, tag: str, generator):
@@ -35,63 +37,143 @@ class BatchWorker:
     def done(self):
         return self.output is not None
 
-def execute_batch(inputs: list, fn, delta_stages: int, exec_type: ExecType):
-    generator_list = [BatchWorker(str(idx), fn(**input, tag=str(idx))) \
+def execute_batch(inputs: list,
+                  fn,
+                  delta_stages: int = 0,
+                  exec_type: ExecType = ExecType.One,
+                  extern_tag: str = ""):
+    worker_list = [BatchWorker(str(idx), fn(**input, tag=str(idx)+extern_tag)) \
                       for idx, input in enumerate(inputs)]
 
     if exec_type == ExecType.One:
         assert len(inputs) == 1
         i = 0
-        while not generator_list[0].done:
-            generator_list[0].next()
+        while not worker_list[0].done:
+            worker_list[0].next()
             i += 1
 
     if exec_type == ExecType.TwoLikeOne:
         assert len(inputs) == 2
         i = 0
-        while not generator_list[0].done:
-            generator_list[0].next()
+        while not worker_list[0].done:
+            worker_list[0].next()
             i += 1
         i = 0
-        while not generator_list[1].done:
-            generator_list[1].next()
+        while not worker_list[1].done:
+            worker_list[1].next()
             i += 1
 
     if exec_type == ExecType.Two0101:
         assert len(inputs) == 2
 
         for _ in range(delta_stages):
-            generator_list[0].next()
+            worker_list[0].next()
         i = 0
-        while not generator_list[0].done:
-            generator_list[0].next()
-            generator_list[1].next()
+        while not worker_list[0].done:
+            worker_list[0].next()
+            worker_list[1].next()
             i += 1
 
-        for _ in range(delta_stages):
-            generator_list[1].next()
+        while not worker_list[1].done:
+            worker_list[1].next()
 
     if exec_type == ExecType.Two0110:
         assert len(inputs) == 2
 
         for _ in range(delta_stages):
-            generator_list[0].next()
+            worker_list[0].next()
         i = 0
-        while not generator_list[0].done:
+        while not worker_list[0].done:
             if i % 2 == 0:
-                generator_list[0].next()
-                generator_list[1].next()
+                worker_list[0].next()
+                worker_list[1].next()
             else:
-                generator_list[1].next()
-                generator_list[0].next()
+                worker_list[1].next()
+                worker_list[0].next()
             i += 1
 
-        for _ in range(delta_stages):
-            generator_list[1].next()
+        while not worker_list[1].done:
+            worker_list[1].next()
 
-    for generator in generator_list:
-        assert generator.done
-    return [generator.output for generator in generator_list]
+    if exec_type == ExecType.TwoPrefill:
+        """
+        before:
+        A-attn0->A-attn1
+        roll:
+        A-dis->B-attn0->B-attn1->A-dis_wait->B-dis->A-moe->B-dis_wait->A-comb->
+        B-moe->(A-share->A-comb_wait)->B-comb->A-attn0->A-attn1->(B-share->B-comb_wait)
+        after:
+        B-dis_wait->B-moe->B-comb->B-comb_wait and end
+        """
+        assert len(inputs) == 2 and delta_stages in [0, 2]
+
+        for _ in range(2):
+            worker_list[0].next()
+
+        pipeline = ["0-dis",
+                    "1-attn0",
+                    "1-attn1",
+                    "0-dis_wait",
+                    "1-dis",
+                    "0-moe",
+                    "1-dis_wait",
+                    "0-comb",
+                    "1-moe",
+                    "0-share+0-comb_wait",
+                    "1-comb",
+                    "0-attn0",
+                    "0-attn1",
+                    "1-share+1-comb_wait"]
+        pipline_length = len(pipeline)
+        i = 0
+        while not worker_list[0].done:
+            worker_list[int(pipeline[i % pipline_length][0])].next()
+            i += 1
+
+        while not worker_list[1].done:
+            worker_list[1].next()
+
+    if exec_type == ExecType.TwoDecode:
+        """
+        before:
+        A-attn0->A-attn1->(A-dis->A-share)
+        roll:
+        B-attn0->A-dis_wait->A-moe->A-comb->B-attn1->A-comb_wait->(B-dis->B-share)->
+        A-attn0->B-dis_wait->B-moe->B-comb->A-attn1->B-comb_wait->(A-dis->A-share)
+        after:
+        B-dis_wait->B-moe->B-comb->B-comb_wait and end
+        """
+        assert len(inputs) == 2 and delta_stages in [0, 3]
+
+        for _ in range(3):
+            worker_list[0].next()
+
+        pipeline = ["1-attn0",
+                    "0-dis_wait",
+                    "0-moe",
+                    "0-comb",
+                    "1-attn1",
+                    "0-comb_wait",
+                    "1-dis+1-share",
+                    "0-attn0",
+                    "1-dis_wait",
+                    "1-moe",
+                    "1-comb",
+                    "0-attn1",
+                    "1-comb_wait",
+                    "0-dis+0-share"]
+        pipline_length = len(pipeline)
+        i = 0
+        while not worker_list[0].done:
+            worker_list[int(pipeline[i % pipline_length][0])].next()
+            i += 1
+
+        while not worker_list[1].done:
+            worker_list[1].next()
+
+    for worker in worker_list:
+        assert worker.done
+    return [worker.output for worker in worker_list]
 
 def can_two_batch(attn_metadata):
     if attn_metadata.q_start_loc.size(dim=0) < 2:
@@ -173,7 +255,8 @@ def split_input(hidden_states, rotary_pos_emb, past_key_values, residual, attn_m
                 "start_idx":moe_start_idx,
                 "end_idx":moe_end_idx
                 }
-        return [input], ExecType.One, 0
+        extern_tag = "D" if attn_metadata.is_decoding else "P"
+        return [input], ExecType.One, 0, extern_tag
     # two batch or more
     assert num == 2
     (q_seqlens, q_seqlens_a, q_seqlens_b, q_start_loc, \
@@ -213,15 +296,17 @@ def split_input(hidden_states, rotary_pos_emb, past_key_values, residual, attn_m
         "start_idx":moe_start_idx,
         "end_idx":moe_end_idx
     }
-    # Todo: update exec mode for decoding
-    if attn_metadata.is_decoding:
-        exec_type = ExecType.Two0110
-        delta_stages = 1
-    else:
-        exec_type = ExecType.Two0110
-        delta_stages = 1
 
-    return [input_a, input_b], exec_type, delta_stages
+    if attn_metadata.is_decoding:
+        exec_type = ExecType.TwoDecode
+        delta_stages = 0
+        extern_tag = "D"
+    else:
+        exec_type = ExecType.TwoPrefill
+        delta_stages = 0
+        extern_tag = "P"
+
+    return [input_a, input_b], exec_type, delta_stages, extern_tag
 
 def merge_output(output_list):
     # one batch
@@ -238,9 +323,22 @@ if ENABLE_TWO:
     print("enable two micro batch", flush=True)
     ### hack model FusedMoEBlockedF8 ###
     from lmdeploy.pytorch.nn.moe import FusedMoEBlockedF8
-    def FusedMoEBlockedF8_forward_yield(self, hidden_states: torch.Tensor, topk_weights: torch.Tensor, topk_ids: torch.LongTensor, tag: Any = None):
-        ret = yield from self.impl.forward_yield(hidden_states, topk_weights, topk_ids, self.gate_up.weight, self.gate_up.scale,
-                                self.down.weight, self.down.scale, self.expert_list, tag)
+    def FusedMoEBlockedF8_forward_yield(self,
+                                        hidden_states: torch.Tensor,
+                                        topk_weights: torch.Tensor,
+                                        topk_ids: torch.LongTensor,
+                                        tag: Any = None,
+                                        shared_experts: Any = None):
+        ret = yield from self.impl.forward_yield(hidden_states,
+                                                 topk_weights,
+                                                 topk_ids,
+                                                 self.gate_up.weight,
+                                                 self.gate_up.scale,
+                                                 self.down.weight,
+                                                 self.down.scale,
+                                                 self.expert_list,
+                                                 tag,
+                                                 shared_experts)
         return ret
     
     FusedMoEBlockedF8.forward_yield = FusedMoEBlockedF8_forward_yield
@@ -254,16 +352,22 @@ if ENABLE_TWO:
         hidden_states = hidden_states.view(-1, hidden_dim)
         topk_weights, topk_ids = self.gate(hidden_states)
 
-        out_states = yield from self.experts.forward_yield(
+        out_states, shared_states = yield from self.experts.forward_yield(
             hidden_states,
             topk_weights,
             topk_ids,
             tag,
+            self.shared_experts
         )
 
-        if self.shared_experts is not None:
-            shared_states = self.shared_experts(hidden_states)
+        if shared_states is not None:
             out_states += shared_states
+        elif self.shared_experts is not None:
+                shared_states = self.shared_experts(hidden_states)
+                out_states += shared_states
+        else:
+            pass
+
         out_states = out_states.reshape(batch_size, sequence_length, -1)
 
         if self._all_reduce:
@@ -291,6 +395,9 @@ if ENABLE_TWO:
         else:
             hidden_states, residual = self.input_layernorm(hidden_states, residual)
 
+        # yield for attn0 and attn1
+        yield
+
         # Self Attention
         hidden_states = self.self_attn(
             hidden_states=hidden_states,
@@ -301,6 +408,7 @@ if ENABLE_TWO:
 
         # Fully Connected
         hidden_states, residual = self.post_attention_layernorm(hidden_states, residual)
+        # yield for attn1, dis (+share), dis_wait, moe, comb, (+share) comb_wait, (+share) attn0
         hidden_states = yield from self.mlp.forward_yield(hidden_states, tag)
 
         outputs = (hidden_states, residual)
@@ -372,7 +480,7 @@ if ENABLE_TWO:
             if can_two_batch(attn_metadata):
                 num = 2
             # split
-            input_list, exec_type, delta_stages = split_input(hidden_states,
+            input_list, exec_type, delta_stages, extern_tag = split_input(hidden_states,
                                                                     rotary_pos_emb,
                                                                     past_key_values,
                                                                     residual,
@@ -384,7 +492,8 @@ if ENABLE_TWO:
             output_list = execute_batch(inputs=input_list,
                                         fn=self.forward_yieldlayers,
                                         delta_stages=delta_stages,
-                                        exec_type=exec_type)
+                                        exec_type=exec_type,
+                                        extern_tag=extern_tag)
             hidden_states, residual = merge_output(output_list)
 
         hidden_states, _ = self.norm(hidden_states, residual)
