@@ -1,6 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 
-from typing import List
+from typing import List, Any
 
 import torch
 import torch.distributed as dist
@@ -361,6 +361,15 @@ class FusedDeepEpMoEBlockedF8Impl(TritonFusedMoEBlockedF8Impl):
                 hidden_size=hidden_dim,
                 params_dtype=out_dtype,
             )
+        self.token_dispatcher_for2mb = DeepEPDispatcher(
+                group=ep_group,
+                router_topk=self.top_k,
+                permute_fusion=True,
+                num_experts=self.num_experts,
+                num_local_experts=self.num_experts // ep_size,
+                hidden_size=hidden_dim,
+                params_dtype=out_dtype,
+            )
         self.experts = DeepEPMoE(num_experts, ep_size, [block_size,block_size])
     
     def forward(self,
@@ -377,7 +386,7 @@ class FusedDeepEpMoEBlockedF8Impl(TritonFusedMoEBlockedF8Impl):
         recv_hidden_states, recv_topk_ids, recv_topk_weights, tokens_per_expert = (
             self.token_dispatcher.dispatch(
                 hidden_states,
-                topk_ids.to(torch.int32),
+                topk_ids.to(torch.int64),
                 topk_weights.to(torch.float32),
                 self.num_experts,
             )
@@ -386,6 +395,61 @@ class FusedDeepEpMoEBlockedF8Impl(TritonFusedMoEBlockedF8Impl):
                                  down_weights, down_scale)
         out_states = self.token_dispatcher.combine(out_states)
         return out_states
+
+    def forward_yield(self,
+                hidden_states: torch.Tensor,
+                topk_weights: torch.Tensor,
+                topk_ids: torch.LongTensor,
+                gate_up_weights: torch.Tensor,
+                gate_up_scale: torch.Tensor,
+                down_weights: torch.Tensor,
+                down_scale: torch.Tensor,
+                expert_list: List[int] = None,
+                tag: Any = None,
+                shared_experts: Any = None):
+        """forward_yield."""
+        topk_weights = _renormalize(topk_weights, self.renormalize)
+
+        if shared_experts is not None:
+            if self.token_dispatcher.get_shared_experts() is None:
+                self.token_dispatcher.set_shared_experts(shared_experts)
+            if self.token_dispatcher.get_shared_experts() is None:
+                self.token_dispatcher_for2mb.set_shared_experts(shared_experts)
+
+        assert tag is not None and len(tag) >= 1
+        _token_dispatcher = self.token_dispatcher
+        if tag is not None and tag[0] == "0":
+            _token_dispatcher = self.token_dispatcher
+        if tag is not None and tag[0] == "1":
+            _token_dispatcher = self.token_dispatcher_for2mb
+        is_decoding = False
+        is_prefill = False
+        if tag is not None and len(tag) > 1 and tag[1].upper() == "P":
+            is_prefill = True
+        if tag is not None and len(tag) > 1 and tag[1].upper() == "D":
+            is_decoding = True
+
+        _token_dispatcher.set_shared_experts(shared_experts)
+        # yield for attn1, dis (+share), dis_wait, moe
+        recv_hidden_states, recv_topk_ids, recv_topk_weights, tokens_per_expert, shared_states_indispatch = (
+            yield from _token_dispatcher.dispatch_yield(
+                hidden_states,
+                topk_ids.to(torch.int64),
+                topk_weights.to(torch.float32),
+                self.num_experts,
+                is_prefill,
+                is_decoding
+            )
+        )
+        out_states = self.experts.forward(recv_hidden_states, tokens_per_expert, gate_up_weights, gate_up_scale,
+                                 down_weights, down_scale)
+        # yield for moe, comb, (+share) comb_wait, (+share) attn0
+        out_states, shared_states_incomb = yield from _token_dispatcher.combine_yield(out_states,
+                                                                                      hidden_states,
+                                                                                      is_prefill,
+                                                                                      is_decoding)
+        shared_states = shared_states_indispatch if shared_states_indispatch is not None else shared_states_incomb
+        return out_states, shared_states
 
 class TritonFusedMoEBlockedF8Builder(FusedMoEBlockedF8Builder):
     """triton fused moe blocked f8 builder."""
