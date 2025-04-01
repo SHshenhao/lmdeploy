@@ -18,6 +18,7 @@ from lmdeploy.pytorch.nn.rotary_embedding import YarnParameters
 from lmdeploy.pytorch.weight_loader.model_weight_loader import load_weight
 
 from .utils.cudagraph import CudaGraphMixin
+from .utils.microbatch import patch_twomicrobatch
 
 
 def yarn_get_mscale(scale=1, mscale=1):
@@ -894,3 +895,6 @@ class DeepseekV2ForCausalLM(nn.Module, CudaGraphMixin):
                 else:
                     param = params_dict[name]
                     load_weight(param, loaded_weight)
+
+
+patch_twomicrobatch()
